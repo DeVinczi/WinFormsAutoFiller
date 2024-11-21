@@ -15,12 +15,20 @@
 
         public static readonly Error WorkHoursAreEmpty =
             new(ErrorMessage.BrakIlosciGodzin, "Nie znaleziono godzin w pliku z programem szkolenia.");
+
+        public static readonly Error ChromeProccessingError = new
+            (ErrorMessage.ChromeError, "Wystapił bład podczas dodawania informacji do formularza.");
+
+        public static Error PytaniaDoWnioskuError = new
+            (ErrorMessage.PytaniaDoWniosku, "Zakładka 'Pytania do wniosku' nie znalezione.");
     }
 
     public static class ErrorMessage
     {
         public const string NiepoprawnaNazwaPliku = "Niepoprawna nazwa pliku";
         public const string BrakIlosciGodzin = "Brak ilosci godzin w pliku word";
+        public const string ChromeError = "Wystapił bład podczas dodawania informacji";
+        public const string PytaniaDoWniosku = "Wystąpił bład z danymi do wniosku.";
     }
 
     public static class GUIMessage

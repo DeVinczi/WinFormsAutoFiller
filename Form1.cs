@@ -5,7 +5,9 @@ using FormFiller.Services;
 using System.Data;
 using System.Text.RegularExpressions;
 
+using WinFormsAutoFiller.Encryption;
 using WinFormsAutoFiller.Helpers;
+using WinFormsAutoFiller.Services;
 using WinFormsAutoFiller.Utilis;
 
 namespace WinFormsAutoFiller
@@ -18,7 +20,7 @@ namespace WinFormsAutoFiller
         private string[] selectedFiles;
         private Dictionary<string, string> filePaths;
         private Button openButton;
-
+        private string city;
 
         public Form1()
         {
@@ -154,8 +156,8 @@ namespace WinFormsAutoFiller
             return new Label
             {
                 Text = GUIMessage.BrakWybranegoPliku,
-                Size = new Size(400, 20),
-                Location = new Point(500, 260 + (fileNumber - 1) * 80),
+                Size = new Size(500, 20),
+                Location = new Point(450, 260 + (fileNumber - 1) * 80),
                 Font = new Font("Segoe UI", 9),
                 ForeColor = Color.Gray,
                 TextAlign = ContentAlignment.MiddleCenter
@@ -167,12 +169,12 @@ namespace WinFormsAutoFiller
             Label label = new Label
             {
                 Text = GUIMessage.BrakWybranegoPliku,
-                Size = new Size(600, 200), // Set initial size
+                Size = new Size(600, 200),
                 Location = new Point(400, 260 + (fileNumber - 1) * 80),
                 Font = new Font("Segoe UI", 9),
                 ForeColor = Color.Gray,
                 TextAlign = ContentAlignment.TopCenter,
-                AutoSize = false, // Disable AutoSize so we can manage it
+                AutoSize = false,
             };
 
             // Create a ToolTip for the label
@@ -262,8 +264,6 @@ namespace WinFormsAutoFiller
                         if (!string.IsNullOrEmpty(checkName?.Error?.Code))
                         {
                             MessageBox.Show(checkName.Error.Message, checkName.Error.Code, MessageBoxButtons.OK, MessageBoxIcon.Error);
-                            ((Label)Controls[3]).Text = GUIMessage.BrakWybranegoPliku;
-                            file1Path = null;
                             return;
                         }
                         ((Label)Controls[3]).Text = Path.GetFileName(filePath);
@@ -283,11 +283,10 @@ namespace WinFormsAutoFiller
                         if (!string.IsNullOrEmpty(cityAndDate?.Error?.Code))
                         {
                             MessageBox.Show(cityAndDate.Error.Message, cityAndDate.Error.Code, MessageBoxButtons.OK, MessageBoxIcon.Error);
-                            ((Label)Controls[1]).Text = GUIMessage.BrakWybranegoPliku;
-                            file2Path = null;
                             return;
                         }
 
+                        city = cityAndDate.Value.City;
                         file2Path = filePath;
                         ((Label)Controls[1]).Text = Path.GetFileName(filePath);
                     }
@@ -305,24 +304,56 @@ namespace WinFormsAutoFiller
             var program = RegexHelpers.GetProgram([.. filePaths.Values]);
             var reader = new FileReader();
             var hours = reader.FindWordInWordDocument(program).Value;
+            if (!int.TryParse(hours, out var hoursParsed))
+            {
+                MessageBox.Show("Czas trwania kursu jest nieprawid³owy.", "B³¹d", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            var result = reader.FindObjectInExcelDocument(file1Path);
+            if (!string.IsNullOrEmpty(result?.Error?.Code))
+            {
+                MessageBox.Show(result.Error.Message, "B³¹d", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
 
             //if (string.IsNullOrEmpty(file1Path) || string.IsNullOrEmpty(file2Path))
             //{
-            //    MessageBox.Show("Prosze za³aduj dwa pliki Excel.", "B³ad", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            //    MessageBox.Show("Prosze za³aduj dwa pliki Excel.", "B³¹d", MessageBoxButtons.OK, MessageBoxIcon.Error);
             //    return;
             //}
 
             try
             {
-                await ProcessExcelFiles(file1Path, file2Path);
+                var httpClientService = new HttpClientService();
+                ISeleniumService seleniumService = new SeleniumService();
+                string pathToPdfKrs;
+                string pathToPdfNip;
+                if (!OperationHelpers.ValidateKRS(result.Value.KRS))
+                {
+                    var krs = AESBruteForceDecryption.Encrypt(result.Value.KRS);
+                    pathToPdfKrs = await httpClientService.PostKrsAsync($"https://prs-openapi2-prs-prod.apps.ocp.prod.ms.gov.pl/api/wyszukiwarka/OdpisPelny/pdf", krs, result.Value.KRS);
+
+                }
+                else
+                {
+                    pathToPdfNip = await seleniumService.DownloadComapnyByNipPdf("5842859530");
+                }
+
+                var isProcessed = await ProcessExcelFiles(file1Path, file2Path, city);
+                if (!string.IsNullOrEmpty(isProcessed?.Error?.Code))
+                {
+                    MessageBox.Show($"Wyst¹pi³ b³¹d: {isProcessed.Error.Message}", "B³¹d", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
                 MessageBox.Show("Pliki zosta³y dodane pomyœlnie do formularza.", "Sukces", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Wyst¹pi³ b³ad: {ex.Message}", "B³ad", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Wyst¹pi³ b³¹d: {ex.Message}", "B³¹d", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
 
-            // Reset file paths and labels after processing
             file1Path = null;
             file2Path = null;
             ((Label)Controls[1]).Text = GUIMessage.BrakWybranegoPliku;
@@ -330,7 +361,7 @@ namespace WinFormsAutoFiller
             progressBar.Value = 0;
         }
 
-        private async Task ProcessExcelFiles(string filePath1, string filePath2)
+        private async Task<Result<bool, Error>> ProcessExcelFiles(string filePath1, string filePath2, string city)
         {
             try
             {
@@ -340,7 +371,7 @@ namespace WinFormsAutoFiller
 
                 UpdateProgress(10);
                 seleniumService.LoginToPage();
-                seleniumService.LoadWorkerForm();
+                await seleniumService.LoadWorkerForm();
 
                 var dataTables = await fileReader.ReadExcelFileAsync(filePath1, WorkerFormPatterns.Patterns, "Dane ogólne");
                 UpdateProgress(20);
@@ -351,7 +382,7 @@ namespace WinFormsAutoFiller
                 for (var i = tmp.Item2.Rows.Count(); i > 1; i--)
                 {
                     var row = fileReader.ReadExcelRow(tmp.Item1);
-                    seleniumService.ProvideWorkerInformation(row);
+                    seleniumService.ProvideWorkerInformation(row, city);
                     await fileWriter.DeleteExcelRowAsync(tmp.Item1, i);
                     UpdateProgress(30 + (int)((tmp.Item2.Rows.Count() - i) / (float)tmp.Item2.Rows.Count() * 20));
                 }
@@ -389,10 +420,12 @@ namespace WinFormsAutoFiller
                 var matchingWorksheets = worksheetNames.Where(x => regex.IsMatch(x)).ToList();
 
                 UpdateProgress(100);
+                return true;
             }
             catch (Exception ex)
             {
                 Console.WriteLine(ex);
+                return Errors.ChromeProccessingError;
             }
         }
 

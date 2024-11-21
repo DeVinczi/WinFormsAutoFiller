@@ -46,7 +46,11 @@ namespace FormFiller.Services
         {
             try
             {
-                var options = new ChromeOptions();
+                var options = new ChromeOptions
+                {
+                    EnableDownloads = true,
+                };
+
                 _driver = new ChromeDriver(options);
                 _wait = new WebDriverWait(_driver, TimeSpan.FromSeconds(30));
             }

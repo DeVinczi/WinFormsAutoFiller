@@ -21,8 +21,9 @@ namespace FormFiller.Services;
 public interface ISeleniumService
 {
     void LoginToPage();
-    void LoadWorkerForm();
-    void ProvideWorkerInformation(ExcelWorkersRow row);
+    Task LoadWorkerForm();
+    Task<string> DownloadComapnyByNipPdf(string nip);
+    void ProvideWorkerInformation(ExcelWorkersRow row, string city);
     void LoadPlanowanyRealizator();
     void LoadInfomacjeDotyczaceKsztalcenia(ExcelWorksheet row, DataTable? listaSzkolen, DataTable? pracownicy);
 }
@@ -79,14 +80,22 @@ public class SeleniumService : ISeleniumService, IDisposable
         }
     }
 
-    public void LoadWorkerForm()
+    public async Task LoadWorkerForm()
     {
         try
         {
             InitializeDriver();
+            var startForm = By.CssSelector("div[psz-kfs-uczestnicy]");
             var uczestnicyForm = By.CssSelector("div[data-psz-kfs-uczestnicy]");
 
             var wait = new WebDriverWait(_chromeDriver, TimeSpan.FromMinutes(5));
+            wait.Until(ExpectedConditions.ElementIsVisible(startForm));
+
+            ExecuteKursyRadioButton();
+
+            _chromeDriver.ExecuteScript(
+                "document.querySelector('button[data-ng-click=\"zapiszForme()\"]').click()");
+
             wait.Until(ExpectedConditions.ElementIsVisible(uczestnicyForm));
 
             var addWorkerButton = By.Id("tabela-uczestnik");
@@ -98,7 +107,7 @@ public class SeleniumService : ISeleniumService, IDisposable
         }
     }
 
-    public void ProvideWorkerInformation(ExcelWorkersRow row)
+    public void ProvideWorkerInformation(ExcelWorkersRow row, string city)
     {
         try
         {
@@ -109,6 +118,9 @@ public class SeleniumService : ISeleniumService, IDisposable
             }
 
             InitializeDriver();
+
+            ExecuteInputByName("dane.miejscowosc", city);
+
             _chromeDriver.ExecuteScript(
                 "document.querySelector('div#tabela-uczestnik div.button-container button[data-ng-show=\"options.addButton\"]').click()");
 
@@ -470,6 +482,23 @@ public class SeleniumService : ISeleniumService, IDisposable
             Console.WriteLine(ex.Message);
         }
     }
+
+    void ExecuteKursyRadioButton()
+    {
+        try
+        {
+            _chromeDriver.ExecuteScript(
+                $"""
+            const firstXpath = "//div[@class='wiersz']/label/input[@name='potrzebySzkoleniowe' and @value='false']";
+            document.evaluate(firstXpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue.click();
+            """);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+    }
+
     private void ExecuteCheckbox(string model)
     {
         try
@@ -617,5 +646,60 @@ public class SeleniumService : ISeleniumService, IDisposable
     {
         _chromeDriver?.Quit();
         _chromeDriver?.Dispose();
+    }
+
+    public async Task<string> DownloadComapnyByNipPdf(string nip)
+    {
+        InitializeDriver();
+        await _chromeDriver.Navigate().GoToUrlAsync("https://aplikacja.ceidg.gov.pl/ceidg/ceidg.public.ui/search.aspx");
+        var nipInput = "MainContentForm_txtNip";
+        _webDriverWait.Until(ExpectedConditions.ElementIsVisible(By.Id(nipInput)));
+
+        var element = _chromeDriver.FindElement(By.Id(nipInput));
+        element.SendKeys(nip);
+
+        var searchButton = "MainContentForm_btnInputSearch";
+        _chromeDriver.FindElement(By.Id(searchButton)).Click();
+
+        var details = By.Id("MainContentForm_DataListEntities_hrefDetails_0");
+        _webDriverWait.Until(ExpectedConditions.ElementIsVisible(details));
+
+        _chromeDriver.FindElement(details).Click();
+
+        var downloadButton = By.Id("MainContentForm_btnPrint");
+        _webDriverWait.Until(ExpectedConditions.ElementIsVisible(downloadButton));
+
+        _chromeDriver.FindElement(downloadButton).Click();
+
+        var downloadPdfButton = By.Id("MainContentForm_linkDownloadG");
+        _webDriverWait.Until(ExpectedConditions.ElementIsVisible(downloadPdfButton));
+
+        _chromeDriver.FindElement(downloadPdfButton).Click();
+
+        string downloadFolder = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + @"\Downloads";
+
+        if (Directory.Exists(downloadFolder))
+        {
+            // Get all files in the download folder
+            var files = Directory.GetFiles(downloadFolder);
+
+            if (files.Length > 0)
+            {
+                // Get the most recently downloaded file (last modified or created)
+                var latestFile = files
+                    .Select(file => new FileInfo(file))  // Convert file paths to FileInfo objects
+                    .OrderByDescending(fileInfo => fileInfo.LastWriteTime)  // Sort by last write time (modification time)
+                    .First();  // Take the most recent file
+
+                string newFileName = Path.Combine(latestFile.DirectoryName, $"NIP_{nip}" + latestFile.Extension);
+                File.Move(latestFile.FullName, newFileName);
+                return newFileName;
+            }
+            else
+            {
+                Console.WriteLine("No files found in the download folder.");
+            }
+        }
+        return string.Empty;
     }
 }

@@ -3,6 +3,9 @@
 using FormFiller.Constants;
 using FormFiller.Models;
 
+using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel;
+
 using OfficeOpenXml;
 
 using System.Data;
@@ -10,6 +13,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 
 using WinFormsAutoFiller.Infrastructure;
+using WinFormsAutoFiller.Models.PytaniaDoWnioskuEntity;
 using WinFormsAutoFiller.Utilis;
 
 namespace FormFiller.Services;
@@ -20,6 +24,7 @@ public interface IFileReader
     ExcelWorkersRow? ReadExcelRow(string tempFilePath, int startIndex = 1);
     Task<List<string>> GetExcelWorksheetNames(string fileName);
     Result<string, Error> FindWordInWordDocument(string fileName);
+    Result<CompanyFormData, Error> FindObjectInExcelDocument(string filename);
 }
 
 public class FileReader : IFileReader
@@ -251,6 +256,121 @@ public class FileReader : IFileReader
         else
         {
             return Errors.WorkHoursAreEmpty;
+        }
+    }
+
+    public Result<CompanyFormData, Error> FindObjectInExcelDocument(string filename)
+    {
+        var formData = new CompanyFormData();
+
+        try
+        {
+            using (FileStream file = new FileStream(filename, FileMode.Open, FileAccess.Read))
+            {
+                var workbook = new XSSFWorkbook(file);
+                var sheet = workbook.GetSheet("Pytania do wniosku");
+
+                if (sheet is null)
+                {
+                    Console.WriteLine("Zakładka 'Pytania do wniosku' nie znalezione.");
+                    return Errors.PytaniaDoWnioskuError;
+                }
+
+                for (int i = 0; i <= sheet.LastRowNum; i++)
+                {
+                    IRow row = sheet.GetRow(i);
+                    if (row == null || row.Cells.Count < 2) continue;
+
+                    // Get the key (first cell) and value (second cell)
+                    string key = row.GetCell(1)?.ToString().Trim();
+                    string value = row.GetCell(2)?.ToString().Trim();
+
+                    if (key.StartsWith("adres email"))
+                    {
+                        key = "adres email";
+                    }
+                    if (key.StartsWith("Osoba do podpisywania umów z PUP"))
+                    {
+                        key = "Osoba do podpisywania umów z PUP";
+                    }
+                    if (key.StartsWith("Adresy dodatkowe prowadzonej działalności"))
+                    {
+                        key = "Adresy dodatkowe prowadzonej działalności";
+                    }
+                    if (key.StartsWith("Czy w spółce w roku 2024 bądź w ciągu najbliższego roku"))
+                    {
+                        key = "Czy w spółce w roku 2024 bądź w ciągu najbliższego roku";
+                    }
+
+                    // Map the keys to object properties
+                    switch (key)
+                    {
+                        case "NIP":
+                            formData.NIP = value;
+                            break;
+                        case "REGON":
+                            formData.REGON = value;
+                            break;
+                        case "KRS":
+                            formData.KRS = value;
+                            break;
+                        case "nr tel":
+                            formData.PhoneNumber = value;
+                            break;
+                        case "adres email":
+                            formData.PUPContact.Email = value;
+                            break;
+                        case "numer telefonu":
+                            formData.PUPContact.Phone = value;
+                            break;
+                        case "Osoba do kontaktu z PUP - imię i nazwisko":
+                            formData.PUPContact.Name = value;
+                            break;
+                        case "PKD (przeważąjące)":
+                            formData.PKD = value;
+                            break;
+                        case "Osoba do podpisywania umów z PUP":
+                            formData.SigningPerson.Name = value;
+                            break;
+                        case "czy osoba do podpisywania umów posiada podpis elektroniczn/EPUAP?":
+                            formData.SigningPerson.HasElectronicSignIn = value;
+                            break;
+                        case "Czy w spółce w roku 2024 bądź w ciągu najbliższego roku":
+                            formData.PlannedInvestments = value;
+                            break;
+                        case "Sposób prowadzenia sprawozdawczości finansowej":
+                            formData.FinancialReportingMethod = value;
+                            break;
+                        case "nazwa banku w którym jest rachunek":
+                            formData.BankAccountDetails.BankName = value;
+                            break;
+                        case "numer rachunku bankowego":
+                            formData.BankAccountDetails.AccountNumber = value;
+                            break;
+                        case "Adresy dodatkowe prowadzonej działalności":
+                            formData.AdditionalBusinessAddresses = value;
+                            break;
+                        case "Liczba osób zatrudniona na umowę o pracę":
+                            if (int.TryParse(value, out int all))
+                                formData.EmploymentData.ContractEmployees = all;
+                            break;
+                        case "w tym w pełnym wymiarze godzin":
+                            if (int.TryParse(value, out int fullTime))
+                                formData.EmploymentData.FullTimeEmployees = fullTime;
+                            break;
+                        case "w niepełnym wymiarze godzin":
+                            if (int.TryParse(value, out int partTime))
+                                formData.EmploymentData.PartTimeEmployees = partTime;
+                            break;
+                    }
+                }
+            }
+
+            return formData;
+        }
+        catch (Exception ex)
+        {
+            return new Error("General Error", ex.Message);
         }
     }
 }
