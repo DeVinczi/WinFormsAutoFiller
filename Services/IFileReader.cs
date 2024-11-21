@@ -9,6 +9,9 @@ using System.Data;
 using System.Text;
 using System.Text.RegularExpressions;
 
+using WinFormsAutoFiller.Infrastructure;
+using WinFormsAutoFiller.Utilis;
+
 namespace FormFiller.Services;
 
 public interface IFileReader
@@ -16,6 +19,7 @@ public interface IFileReader
     Task<DataTable?> ReadExcelFileAsync(string fileName, Dictionary<string, Regex> columnPatterns, string worksheetName);
     ExcelWorkersRow? ReadExcelRow(string tempFilePath, int startIndex = 1);
     Task<List<string>> GetExcelWorksheetNames(string fileName);
+    Result<string, Error> FindWordInWordDocument(string fileName);
 }
 
 public class FileReader : IFileReader
@@ -224,6 +228,29 @@ public class FileReader : IFileReader
             {
                 Console.WriteLine($"  Training {i + 1}: {entry.Trainings[i]}");
             }
+        }
+    }
+
+    public Result<string, Error> FindWordInWordDocument(string filePath)
+    {
+        dynamic wordApp = Activator.CreateInstance(Type.GetTypeFromProgID("Word.Application"));
+
+        var doc = wordApp.Documents.Open(filePath);
+
+        var text = doc.Content.Text;
+
+        var match = RegexPatterns.FindOutHoursRegex().Match(text);
+
+        doc.Close();
+        wordApp.Quit();
+
+        if (match.Success)
+        {
+            return match.Groups[1].Value;
+        }
+        else
+        {
+            return Errors.WorkHoursAreEmpty;
         }
     }
 }

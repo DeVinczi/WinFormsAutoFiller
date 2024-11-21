@@ -6,12 +6,19 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>res.ico</ApplicationIcon>
+    <AssemblyName>AutoWypelnianieFormularzaKFS</AssemblyName>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="res.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="EPPlus" Version="7.5.0" />
     <PackageReference Include="ExcelDataReader" Version="3.7.0" />
     <PackageReference Include="ExcelDataReader.DataSet" Version="3.7.0" />
+    <PackageReference Include="Microsoft.Office.Interop.Word" Version="15.0.4797.1004" />
     <PackageReference Include="Selenium.WebDriver" Version="4.25.0" />
     <PackageReference Include="Selenium.WebDriver.ChromeDriver" Version="130.0.6723.11600" />
     <PackageReference Include="SeleniumAutomationUtils" Version="1.0.11" />
