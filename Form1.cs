@@ -373,9 +373,10 @@ namespace WinFormsAutoFiller
 
                 UpdateProgress(10);
                 seleniumService.LoginToPage();
+                var dataTables = await fileReader.ReadExcelFileAsync(filePath1, WorkerFormPatterns.Patterns, "Dane ogólne");
+
                 await seleniumService.LoadForm(businessAddresses, city, pkd, nrRachunku, liczbaZatrudnionych, contactPerson, startDate, endDate, paths, krs, ceidg);
 
-                var dataTables = await fileReader.ReadExcelFileAsync(filePath1, WorkerFormPatterns.Patterns, "Dane ogólne");
                 UpdateProgress(20);
 
                 IFileWriter fileWriter = new FormFiller.Services.FileWriter();
