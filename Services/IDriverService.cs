@@ -51,6 +51,13 @@ namespace FormFiller.Services
                     EnableDownloads = true,
                 };
 
+                var path = Path.Combine(Path.GetTempPath() + "ayp");
+                Directory.CreateDirectory(path);
+                options.AddUserProfilePreference("filebrowser.default_location", path);
+                options.AddUserProfilePreference("download.default_directory", path);
+                options.AddUserProfilePreference("download.directory_upgrade", true);
+                options.AddUserProfilePreference("savefile.default_directory", path);
+
                 _driver = new ChromeDriver(options);
                 _wait = new WebDriverWait(_driver, TimeSpan.FromSeconds(30));
             }

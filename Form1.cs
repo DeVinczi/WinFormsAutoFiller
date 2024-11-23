@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 
 using WinFormsAutoFiller.Encryption;
 using WinFormsAutoFiller.Helpers;
+using WinFormsAutoFiller.Models.PytaniaDoWnioskuEntity;
 using WinFormsAutoFiller.Services;
 using WinFormsAutoFiller.Utilis;
 
@@ -339,8 +340,10 @@ namespace WinFormsAutoFiller
                 {
                     pathToPdfNip = await seleniumService.DownloadComapnyByNipPdf("5842859530");
                 }
+                var pkd = Regex.Match(result.Value.PKD.Replace(".", ""), @"\d+[A-Z]").Value;
+                var nrRachunku = Regex.Replace(result.Value.BankAccountDetails.AccountNumber, @"[^\d\s]", "").Trim();
 
-                var isProcessed = await ProcessExcelFiles(file1Path, file2Path, city);
+                var isProcessed = await ProcessExcelFiles(file1Path, file2Path, result.Value.AdditionalBusinessAddresses, city, pkd, nrRachunku, result.Value.EmploymentData.ContractEmployees, );
                 if (!string.IsNullOrEmpty(isProcessed?.Error?.Code))
                 {
                     MessageBox.Show($"Wyst¹pi³ b³¹d: {isProcessed.Error.Message}", "B³¹d", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -361,17 +364,16 @@ namespace WinFormsAutoFiller
             progressBar.Value = 0;
         }
 
-        private async Task<Result<bool, Error>> ProcessExcelFiles(string filePath1, string filePath2, string city)
+        private async Task<Result<bool, Error>> ProcessExcelFiles(string filePath1, string filePath2, string businessAddresses, string city, string pkd, string nrRachunku, int liczbaZatrudnionych, ContactPerson contactPerson, DateTime startDate, DateTime endDate, string[] paths, string krs, string ceidg)
         {
             try
             {
-                // Simulating the processing of the provided code
                 var fileReader = new FileReader();
                 ISeleniumService seleniumService = new SeleniumService();
 
                 UpdateProgress(10);
                 seleniumService.LoginToPage();
-                await seleniumService.LoadWorkerForm();
+                await seleniumService.LoadForm(businessAddresses, city, pkd, nrRachunku, liczbaZatrudnionych, contactPerson, startDate, endDate, paths, krs, ceidg);
 
                 var dataTables = await fileReader.ReadExcelFileAsync(filePath1, WorkerFormPatterns.Patterns, "Dane ogólne");
                 UpdateProgress(20);
@@ -387,7 +389,7 @@ namespace WinFormsAutoFiller
                     UpdateProgress(30 + (int)((tmp.Item2.Rows.Count() - i) / (float)tmp.Item2.Rows.Count() * 20));
                 }
 
-                var data = fileReader.ReadExcelFileAsync(tmp.Item1, WorkerFormPatterns.Patterns, null).Result;
+                var data = await fileReader.ReadExcelFileAsync(tmp.Item1, WorkerFormPatterns.Patterns, null);
                 if (data.Rows.Count == 0)
                 {
                     File.Delete(tmp.Item1);

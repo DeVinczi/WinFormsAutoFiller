@@ -16,5 +16,8 @@ namespace WinFormsAutoFiller.Infrastructure
 
         [GeneratedRegex(@"(?i)\\(\bprogram\b)\s*-\s*[^\\]+(?:\.docx?|\.dotx?|\.docm?|\.dotm?|\.rtf|\.wps)$", RegexOptions.IgnoreCase, 3000)]
         internal static partial Regex GetProgramRegex();
+
+        [GeneratedRegex(@"(?<=\\bw(?:e)?\\s)[A-ZĄĆĘŁŃÓŚŹŻ][\\w-]*(?:\\s[A-ZĄĆĘŁŃÓŚŹŻ][\\w-]*)*", RegexOptions.IgnoreCase, 3000)]
+        internal static partial Regex GetPUPCityName();
     }
 }

@@ -72,5 +72,23 @@ namespace WinFormsAutoFiller.Helpers
                 return string.Empty;
             }
         }
+
+        public static string GetPUPCityName(string input)
+        {
+            try
+            {
+                var match = RegexPatterns.GetPUPCityName().Match(input);
+                if (match.Success)
+                {
+                    return match.Groups[1].Value;
+                }
+
+                return string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
     }
 }

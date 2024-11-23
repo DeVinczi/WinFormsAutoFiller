@@ -21,6 +21,9 @@
 
         public static Error PytaniaDoWnioskuError = new
             (ErrorMessage.PytaniaDoWniosku, "Zakładka 'Pytania do wniosku' nie znalezione.");
+
+        public static readonly Error BrakPlikuNipError = new(ErrorMessage.BrakPlikuNip, "Wystąpił bład. Nie ma plików w folderze z NIP.");
+        public static readonly Error PlikZZałącznikaNieWystepujeError = new(ErrorMessage.PlikZZałącznikaNieWystepujeError, "Plik z załącznika nie wystepuje. Sprawdź nazwy!");
     }
 
     public static class ErrorMessage
@@ -29,6 +32,8 @@
         public const string BrakIlosciGodzin = "Brak ilosci godzin w pliku word";
         public const string ChromeError = "Wystapił bład podczas dodawania informacji";
         public const string PytaniaDoWniosku = "Wystąpił bład z danymi do wniosku.";
+        public const string BrakPlikuNip = "Wystąpił bład. Nie ma plików w folderze z NIP.";
+        public const string PlikZZałącznikaNieWystepujeError = "Plik z załącznika nie wystepuje. Sprawdź nazwy!";
     }
 
     public static class GUIMessage

@@ -13,7 +13,10 @@ using OpenQA.Selenium.Support.UI;
 using SeleniumExtras.WaitHelpers;
 
 using System.Data;
-using System.Text.RegularExpressions;
+
+using WinFormsAutoFiller.Helpers;
+using WinFormsAutoFiller.Models.PytaniaDoWnioskuEntity;
+using WinFormsAutoFiller.Utilis;
 
 
 namespace FormFiller.Services;
@@ -21,11 +24,12 @@ namespace FormFiller.Services;
 public interface ISeleniumService
 {
     void LoginToPage();
-    Task LoadWorkerForm();
+    Task LoadForm(string businessAddresses, string city, string pkd, string nrRachunku, int liczbaZatrudnionych, ContactPerson contactPerson, DateTime startDate, DateTime endDate, string[] paths, string krs, string ceidg);
     Task<string> DownloadComapnyByNipPdf(string nip);
     void ProvideWorkerInformation(ExcelWorkersRow row, string city);
     void LoadPlanowanyRealizator();
     void LoadInfomacjeDotyczaceKsztalcenia(ExcelWorksheet row, DataTable? listaSzkolen, DataTable? pracownicy);
+    void LoadEndOfForm();
 }
 
 public class SeleniumService : ISeleniumService, IDisposable
@@ -56,6 +60,7 @@ public class SeleniumService : ISeleniumService, IDisposable
             }
 
             _chromeDriver.Navigate().GoToUrl("https://www.praca.gov.pl/api/eurzad/oauth2/authorization/login-praca-gov-pl");
+
             var loginButton = By.LinkText("Zaloguj się");
             _webDriverWait.Until(ExpectedConditions.ElementIsVisible(loginButton));
 
@@ -80,12 +85,12 @@ public class SeleniumService : ISeleniumService, IDisposable
         }
     }
 
-    public async Task LoadWorkerForm()
+    public async Task LoadForm(string businessAddresses, string city, string pkd, string nrRachunku, int liczbaZatrudnionych, ContactPerson contactPerson, DateTime startDate, DateTime endDate, string[] paths, string krs, string ceidg)
     {
         try
         {
             InitializeDriver();
-            var startForm = By.CssSelector("div[psz-kfs-uczestnicy]");
+            var startForm = By.CssSelector("div.formularz fieldset");
             var uczestnicyForm = By.CssSelector("div[data-psz-kfs-uczestnicy]");
 
             var wait = new WebDriverWait(_chromeDriver, TimeSpan.FromMinutes(5));
@@ -97,6 +102,116 @@ public class SeleniumService : ISeleniumService, IDisposable
                 "document.querySelector('button[data-ng-click=\"zapiszForme()\"]').click()");
 
             wait.Until(ExpectedConditions.ElementIsVisible(uczestnicyForm));
+
+            var element = _chromeDriver.FindElement(By.CssSelector("label.nazwaUrzedu-gf"));
+            element.SendKeys(city);
+
+            var address = FuzzHelpers.GetAddress(businessAddresses, city);
+            //wyciagnac kod pocztowy
+            var kodPocztowy = _chromeDriver.ExecuteAsyncScript($"document.querySelector('label.kod-pocztowy-gf input').value = '{address}'");
+            _chromeDriver.ExecuteAsyncScript("document.querySelector('label.kod-pocztowy-gf input').dispatchEvent(new Event('input', {bubbles: true })) ");
+
+            ExecuteInputByName("dane.podmiot.adresSiedziby.ulica", address);
+            ExecuteInputByName("dane.podmiot.adresSiedziby.nrDomu", address);
+            if (address is not null)
+            {
+                ExecuteInputByName("dane.podmiot.adresSiedziby.nrLokalu", address);
+            }
+
+            //Wyciagnąć miasto
+            var text = _chromeDriver.ExecuteAsyncScript("document.querySelector('label input#miejscowoscSelectId4sgSelectInputId').value").ToString().Trim();
+            if (text != city)
+            {
+                ExecuteCheckbox("miejsceDzialalnosciInne");
+
+                var kodPocztowyPowiazanyZPUP = _chromeDriver.ExecuteAsyncScript($"document.querySelector('label.kod-pocztowy-gf input#kodPocztowyInputId1').value = '{address}'");
+                _chromeDriver.ExecuteAsyncScript("document.querySelector('label.kod-pocztowy-gf input#kodPocztowyInputId1').dispatchEvent(new Event('input', {bubbles: true })) ");
+
+                ExecuteInputByName("dane.podmiot.miejsceDzialalnosci.ulica", address);
+                ExecuteInputByName("dane.podmiot.miejsceDzialalnosci.nrDomu", address);
+                if (address is not null)
+                {
+                    ExecuteInputByName("dane.podmiot.miejsceDzialalnosci.nrLokalu", address);
+                }
+            }
+
+            SelectAutocompleteOptionWithRetryPKD(pkd);
+            ExecuteInputByName("podmiotNrKonta", nrRachunku);
+            ExecuteInputByName("dane.podmiot.zatrudnieni.liczba", liczbaZatrudnionych.ToString());
+            if (liczbaZatrudnionych > 10)
+            {
+                ExecuteCheckbox("dane.podmiot.zatrudnieni.mikro");
+            }
+
+            ExecuteInputByName("dane.podmiot.osobaKontakt.imie", contactPerson.Name.Split(' ')[0]);
+            ExecuteInputByName("dane.podmiot.osobaKontakt.nazwisko", contactPerson.Name.Split(' ')[1]);
+            ExecuteInputByName("dane.podmiot.osobaKontakt.stanowisko", contactPerson.Position);
+            ExecuteInputByName("dane.podmiot.osobaKontakt.telefon", contactPerson.Phone);
+            ExecuteInputByName("dane.podmiot.osobaKontakt.adresEMail", contactPerson.Email);
+
+            _chromeDriver.ExecuteAsyncScript("document.querySelector(\"input[data-ng-model='dane.koszty.zrodloSrodkow']\").click()");
+
+            ExecuteInputByName("dane.termin.dataOd", startDate.ToString());
+            ExecuteInputByName("dane.termin.dataDo", endDate.ToString());
+
+            var p = PathHelpers.GetRightPath(paths);
+            if (!string.IsNullOrEmpty(p?.Error?.Message))
+            {
+                throw new Exception(p.Error.Message);
+            }
+            if (p.Value.ContainsKey(PathHelpers.OŚWIADCZENIE_DE_MINIMIS))
+            {
+                ExecuteDragAndDrop("kontrolkaZalacznikow1", p.Value[PathHelpers.OŚWIADCZENIE_DE_MINIMIS].First());
+            }
+            else { ExecuteDragAndDrop("kontrolkaZalacznikow1", p.Value[PathHelpers.DE_MINIMIS].First()); }
+
+            ExecuteDragAndDrop("kontrolkaZalacznikow2", p.Value[PathHelpers.OŚWIADCZENIE_CERTYFIKAT_KOMPLET].First());
+
+            if (string.IsNullOrEmpty(krs))
+            {
+                ExecuteDragAndDrop("kontrolkaZalacznikow3", ceidg);
+            }
+            else
+            {
+                ExecuteDragAndDrop("kontrolkaZalacznikow3", krs);
+            }
+            if (p.Value[PathHelpers.PROGRAM].Count > 1)
+            {
+                ExecuteDragAndDrop("kontrolkaZalacznikow4", p.Value[PathHelpers.PROGRAM].ToArray());
+            }
+            else
+            {
+                ExecuteDragAndDrop("kontrolkaZalacznikow4", p.Value[PathHelpers.PROGRAM].First());
+            }
+
+            ExecuteDragAndDrop("kontrolkaZalacznikow5", p.Value[PathHelpers.WZÓR_CERTYFIKATU].First());
+
+            if (p.Value.ContainsKey(PathHelpers.PEŁNOMOCNICTWO))
+            {
+                ExecuteCheckbox("zalacznik.dolaczony");
+                ExecuteDragAndDrop("kontrolkaZalacznikow6", p.Value[PathHelpers.PEŁNOMOCNICTWO].First());
+            }
+            var dict = new Dictionary<int, string>();
+            var count = 0;
+
+            _webDriverWait.Until(ExpectedConditions.ElementIsVisible(By.CssSelector("button[data-ng-click=\"dodajZalacznikUzytkownika()\"]")));
+
+            if (p.Value.ContainsKey(PathHelpers.NIP8))
+            {
+                _chromeDriver.ExecuteScript("document.querySelector('button[data-ng-click=\"dodajZalacznikUzytkownika()\"]').click()");
+                dict.Add(count, p.Value[PathHelpers.NIP8].First());
+            }
+            if (p.Value.ContainsKey(PathHelpers.CIT))
+            {
+                _chromeDriver.ExecuteScript("document.querySelector('button[data-ng-click=\"dodajZalacznikUzytkownika()\"]').click()");
+                dict.Add(count, p.Value[PathHelpers.CIT].First());
+            }
+            if (p.Value.ContainsKey(PathHelpers.UMOWA_NAJMU_LOKALIZACJA))
+            {
+                _chromeDriver.ExecuteScript("document.querySelector('button[data-ng-click=\"dodajZalacznikUzytkownika()\"]').click()");
+                dict.Add(count, p.Value[PathHelpers.UMOWA_NAJMU_LOKALIZACJA].First());
+            }
+            ExecuteAdditionalAttachment(dict.Values.ToList());
 
             var addWorkerButton = By.Id("tabela-uczestnik");
             wait.Until(ExpectedConditions.ElementIsVisible(addWorkerButton));
@@ -276,9 +391,8 @@ public class SeleniumService : ISeleniumService, IDisposable
                 Wait();
 
                 var szkolenie = listaSzkolen.Rows[i];
-                string pattern = @"\b[A-Z][a-z]*\b";
 
-                var keyWord = GetKeyWord(szkolenie[TrainingFormKeys.TematSzkolenia].ToString(), pattern);
+                var keyWord = szkolenie[TrainingFormKeys.TematSzkolenia].ToString()![..10];
 
                 var kodDzialania = _chromeDriver.FindElement(By.Id("kod-dzialania"));
                 kodDzialania.SendKeys(keyWord);
@@ -445,6 +559,55 @@ public class SeleniumService : ISeleniumService, IDisposable
         }
     }
 
+    public void SelectAutocompleteOptionWithRetryPKD(string val, int maxRetries = 5, int retryDelayMs = 500)
+    {
+        try
+        {
+            // Set the input value and trigger the input event
+            _chromeDriver.ExecuteScript(
+                $"document.evaluate('//input[@data-sg-autocomplete=\"slowniki/PKD_2007\" and @data-ng-model=\"dane.podmiot.pkd\"]', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue.value = '{val}'");
+
+            // Trigger the input event to show the suggestions
+            _chromeDriver.ExecuteScript(
+                "document.evaluate('//input[@data-sg-autocomplete=\"slowniki/PKD_2007\" and @data-ng-model=\"dane.podmiot.pkd\"]', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue.dispatchEvent(new Event('input', { bubbles: true }));");
+            // Retry finding and clicking the list item up to `maxRetries` times
+            for (int attempt = 0; attempt < maxRetries; attempt++)
+            {
+                try
+                {
+                    // Attempt to select the item
+                    var listItemClickScript = $@"
+                var listItem2 = Array.from(document.querySelectorAll(""ul.ui-autocomplete li"")).find(el => el.textContent.trim() === ""{val}"");
+                if (listItem2) {{
+                    listItem.click();
+                    return true;
+                }}
+                return false;
+            ";
+
+                    bool clicked = (bool)_chromeDriver.ExecuteScript(listItemClickScript);
+
+                    if (clicked)
+                    {
+                        Console.WriteLine("Autocomplete option clicked successfully.");
+                        break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Attempt {attempt + 1} failed: {ex.Message}");
+                }
+
+                // Wait a short period before retrying
+                Thread.Sleep(retryDelayMs);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+    }
+
     private void ExecuteInputByName(string name, string inputValue)
     {
         try
@@ -473,7 +636,7 @@ public class SeleniumService : ISeleniumService, IDisposable
         {
             _chromeDriver.ExecuteScript(
                 $"""
-            const xpath = "//div[@class='wiersz']/label/input[@name='dzialanieTyp' and @value='{radioButtonValue}']";
+            var xpath = "//div[@class='wiersz']/label/input[@name='dzialanieTyp' and @value='{radioButtonValue}']";
             document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue.click();
             """);
         }
@@ -576,7 +739,7 @@ public class SeleniumService : ISeleniumService, IDisposable
                   """
                 );
             Task.Delay(500).Wait();
-            // Click the desired dropdown option
+
             _chromeDriver.ExecuteScript("Array.from(document.querySelectorAll(\"ul.ui-autocomplete li\")).find(el => el.textContent.trim() == \"Kompetencje cyfrowe\").click()");
         }
         catch (WebDriverTimeoutException)
@@ -601,22 +764,6 @@ public class SeleniumService : ISeleniumService, IDisposable
         }
     }
 
-    static string GetKeyWord(string sentence, string pattern)
-    {
-        var regex = new Regex(pattern);
-        var matches = regex.Matches(sentence);
-
-        if (matches.Count > 0)
-        {
-            // Return the first capitalized word
-            return matches[0].Value;
-        }
-        else
-        {
-            return "Do wstawienia";
-        }
-    }
-
     static Dictionary<string, string> MapColumnByKey(DataTable dataTable, string keyColumn, string valueColumn)
     {
         // Check if columns exist
@@ -635,7 +782,7 @@ public class SeleniumService : ISeleniumService, IDisposable
 
             if (!string.IsNullOrEmpty(key) && !mapping.ContainsKey(key))
             {
-                mapping[key] = value ?? string.Empty; // Use empty string if value is null
+                mapping[key] = value ?? string.Empty;
             }
         }
 
@@ -676,30 +823,177 @@ public class SeleniumService : ISeleniumService, IDisposable
 
         _chromeDriver.FindElement(downloadPdfButton).Click();
 
-        string downloadFolder = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + @"\Downloads";
-
-        if (Directory.Exists(downloadFolder))
+        var downloadedFile = await GetDownloadPathToNipFile(nip);
+        if (!string.IsNullOrEmpty(downloadedFile?.Error?.Message))
         {
-            // Get all files in the download folder
-            var files = Directory.GetFiles(downloadFolder);
+            return string.Empty;
+        }
 
-            if (files.Length > 0)
+        return downloadedFile.Value;
+    }
+
+    private async Task<Result<string, Error>> GetDownloadPathToNipFile(string nip)
+    {
+        var downloadPath = Path.Combine(Path.GetTempPath() + "ayp");
+
+        try
+        {
+            for (int i = 0; i < 3; i++)
             {
-                // Get the most recently downloaded file (last modified or created)
+                var files = Directory.GetFiles(downloadPath);
                 var latestFile = files
-                    .Select(file => new FileInfo(file))  // Convert file paths to FileInfo objects
-                    .OrderByDescending(fileInfo => fileInfo.LastWriteTime)  // Sort by last write time (modification time)
-                    .First();  // Take the most recent file
+                        .Select(file => new FileInfo(file))
+                        .OrderByDescending(fileInfo => fileInfo.LastWriteTime)
+                        .Any(x => x.LastWriteTime >= DateTime.UtcNow.AddMinutes(-3));
 
-                string newFileName = Path.Combine(latestFile.DirectoryName, $"NIP_{nip}" + latestFile.Extension);
-                File.Move(latestFile.FullName, newFileName);
-                return newFileName;
+                if (latestFile)
+                {
+                    break;
+                }
+                await Task.Delay(500);
             }
-            else
+
+            if (Directory.Exists(downloadPath))
             {
-                Console.WriteLine("No files found in the download folder.");
+                var files = Directory.GetFiles(downloadPath);
+                if (files.Length > 0)
+                {
+                    var latestFile = files
+                        .Select(file => new FileInfo(file))
+                        .OrderByDescending(fileInfo => fileInfo.LastWriteTime)
+                        .First();
+
+                    string newFileName = Path.Combine(latestFile.DirectoryName, $"NIP_{nip}" + ".pdf");
+                    File.Move(latestFile.FullName, newFileName);
+                    return newFileName;
+                }
+                else
+                {
+                    Console.WriteLine("Wystąpił bład. Nie ma plików w folderze z NIP.");
+                    return Errors.BrakPlikuNipError;
+                }
+            }
+            return Errors.BrakPlikuNipError;
+        }
+        catch (Exception ex)
+        {
+            return ex.Message;
+        }
+    }
+
+    public void LoadEndOfForm()
+    {
+        ExecuteCheckbox("dane.oswiadczenie.pkt1");
+        _chromeDriver.ExecuteScript("document.querySelector(\"input[data-ng-model='dane.oswiadczenie.pkt2']\").click()");
+        ExecuteCheckbox("dane.oswiadczenie.pkt3");
+        ExecuteCheckbox("dane.oswiadczenie.pkt4");
+        ExecuteCheckbox("dane.oswiadczenie.pkt5");
+        ExecuteCheckbox("dane.oswiadczenie.pkt6");
+    }
+
+    void ExecuteDragAndDrop(string dropzoneId, string path)
+    {
+        var dropzoneElement = _webDriverWait.Until(d => d.FindElement(By.CssSelector($"div#{dropzoneId}")));
+        var name = path[(path.LastIndexOf('\\') + 1)..];
+        var bytes = File.ReadAllBytes(path);
+        var base64String = Convert.ToBase64String(bytes);
+
+        _chromeDriver.ExecuteScript(
+            $$"""
+              var {{dropzoneId}} = document.querySelector('div#{{dropzoneId}} div#dropzone');
+              if (dropzone) {
+                  var byteCharacters = atob("{{base64String}}");
+                  var byteArray = new Uint8Array(byteCharacters.length);
+              
+                  for (var i = 0; i < byteCharacters.length; i++) {
+                      byteArray[i] = byteCharacters.charCodeAt(i);
+                  }
+              
+                  var file = new File([byteArray], "{{name}}", { type: 'application/pdf' });
+                  var dataTransfer = new DataTransfer();
+                  dataTransfer.items.add(file);
+                  var event = new DragEvent('drop', {
+                      dataTransfer: dataTransfer
+                  });
+                  {{dropzoneId}}.dispatchEvent(event);
+              } else {
+                  throw new Error('Dropzone element not found');
+              }
+              """);
+    }
+
+    void ExecuteDragAndDrop(string dropzoneId, string[] paths)
+    {
+        var dropzoneElement = _webDriverWait.Until(d => d.FindElement(By.CssSelector($"div#{dropzoneId}")));
+
+        var filesData = paths.Select(path =>
+        {
+            var name = path[(path.LastIndexOf('\\') + 1)..];
+            var bytes = File.ReadAllBytes(path);
+            var base64String = Convert.ToBase64String(bytes);
+            return new { name, base64String };
+        }).ToArray();
+
+        var jsFilesArray = filesData.Select(file =>
+            $$"""
+          {
+              name: "{{file.name}}",
+              content: "{{file.base64String}}"
+          }
+        """
+        ).Aggregate((a, b) => $"{a},{b}");
+
+        _chromeDriver.ExecuteScript(
+            $$"""
+          var dropzone = document.querySelector('div#{{dropzoneId}} div#dropzone');
+          if (dropzone) {
+              var files = [{{jsFilesArray}}].map(file => {
+                  var byteCharacters = atob(file.content);
+                  var byteArray = new Uint8Array(byteCharacters.length);
+
+                  for (var i = 0; i < byteCharacters.length; i++) {
+                      byteArray[i] = byteCharacters.charCodeAt(i);
+                  }
+
+                  return new File([byteArray], file.name, { type: 'application/pdf' });
+              });
+
+              var dataTransfer = new DataTransfer();
+              files.forEach(file => dataTransfer.items.add(file));
+
+              var event = new DragEvent('drop', {
+                  dataTransfer: dataTransfer
+              });
+              dropzone.dispatchEvent(event);
+          } else {
+              throw new Error('Dropzone element not found');
+          }
+          """
+        );
+    }
+
+    void ExecuteAdditionalAttachment(List<string> paths)
+    {
+        var elements = _chromeDriver.FindElements(By.CssSelector("div[data-ng-repeat='zalacznik in zalaczniki track by $index']"));
+        if (elements.Count > 1)
+        {
+            var elementsToAdd = elements.Where(x => x.Text.StartsWith("Opis załącznika:")).ToList();
+            var constInt = 7;
+
+            for (int i = 0; i < elementsToAdd.Count; i++)
+            {
+                var name = Path.GetFileName(paths[i]);
+                var textarea = elementsToAdd[i].FindElement(By.CssSelector("textarea[data-ng-model='zalacznik.opis']"));
+                textarea.Clear();
+                textarea.SendKeys($"{name}");
+
+                ExecuteDragAndDrop($"kontrolkaZalacznikow{constInt}", paths[i]);
+                ++constInt;
             }
         }
-        return string.Empty;
+        else
+        {
+            Console.WriteLine("Brak Elementów w Załącznikach!");
+        }
     }
 }
