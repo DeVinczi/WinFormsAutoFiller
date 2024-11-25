@@ -52,6 +52,7 @@ namespace FormFiller.Services
                 };
 
                 var path = Path.Combine(Path.GetTempPath() + "ayp");
+
                 Directory.CreateDirectory(path);
                 options.AddUserProfilePreference("filebrowser.default_location", path);
                 options.AddUserProfilePreference("download.default_directory", path);

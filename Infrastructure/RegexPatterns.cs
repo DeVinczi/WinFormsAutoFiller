@@ -19,5 +19,8 @@ namespace WinFormsAutoFiller.Infrastructure
 
         [GeneratedRegex(@"(?<=\\bw(?:e)?\\s)[A-ZĄĆĘŁŃÓŚŹŻ][\\w-]*(?:\\s[A-ZĄĆĘŁŃÓŚŹŻ][\\w-]*)*", RegexOptions.IgnoreCase, 3000)]
         internal static partial Regex GetPUPCityName();
+
+        [GeneratedRegex(@"([A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ]+)_(\d{4}\.\d{2}\.\d{2})", RegexOptions.IgnoreCase)]
+        internal static partial Regex GetCityAndDateExcel();
     }
 }

@@ -15,6 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="ClosedXML" Version="0.104.2" />
     <PackageReference Include="DocX" Version="3.0.1" />
     <PackageReference Include="EPPlus" Version="7.5.0" />
     <PackageReference Include="ExcelDataReader" Version="3.7.0" />
@@ -26,6 +27,42 @@
     <PackageReference Include="Selenium.WebDriver.ChromeDriver" Version="130.0.6723.11600" />
     <PackageReference Include="SeleniumAutomationUtils" Version="1.0.11" />
     <PackageReference Include="SeleniumExtras.WaitHelpers" Version="1.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Uzasadnienia\AYP_Uzasadnienia wyboru firmy szkoleniowej v1_2022.03.03.docx">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Uzasadnienia\AYP_Uzasadnienia wyboru firmy szkoleniowej v2_2021.03.04.docx">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Uzasadnienia\AYP_Uzasadnienia wyboru firmy szkoleniowej v3_2021.03.04.docx">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Uzasadnienia\AYP_uzasadnienia wyboru firmy szkoleniowej v4_2021-03-25.docx">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Uzasadnienia\Uzasadnienie wyboru firmy szkoleniowej brak kontrofert - 1.docx">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Uzasadnienia\Uzasadnienie wyboru firmy szkoleniowej brak kontrofert - 2.docx">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Uzasadnienia\Uzasadnienie wyboru firmy szkoleniowej nr 1.docx">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Uzasadnienia\Uzasadnienie wyboru firmy szkoleniowej nr 2.docx">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Uzasadnienia\Uzasadnienie wyboru firmy szkoleniowej nr 3.docx">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Uzasadnienia\Uzasadnienie wyboru firmy szkoleniowej nr 4.docx">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Uzasadnienia\Uzasadnienie wyboru firmy szkoleniowej nr 5.docx">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

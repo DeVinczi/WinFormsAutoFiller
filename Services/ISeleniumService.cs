@@ -1,8 +1,13 @@
-﻿using FormFiller.Constants;
+﻿using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
+
+using FormFiller.Constants;
 using FormFiller.Helpers;
 using FormFiller.Models;
 using FormFiller.Models.TrainingEntity;
 using FormFiller.Models.WorkerEntity;
+
+using Newtonsoft.Json;
 
 using OfficeOpenXml;
 
@@ -13,8 +18,11 @@ using OpenQA.Selenium.Support.UI;
 using SeleniumExtras.WaitHelpers;
 
 using System.Data;
+using System.Text;
 
 using WinFormsAutoFiller.Helpers;
+using WinFormsAutoFiller.Models;
+using WinFormsAutoFiller.Models.KrsEntity;
 using WinFormsAutoFiller.Models.PytaniaDoWnioskuEntity;
 using WinFormsAutoFiller.Utilis;
 
@@ -23,13 +31,16 @@ namespace FormFiller.Services;
 
 public interface ISeleniumService
 {
+    string DownloadAypRis();
     void LoginToPage();
-    Task LoadForm(string businessAddresses, string city, string pkd, string nrRachunku, int liczbaZatrudnionych, ContactPerson contactPerson, DateTime startDate, DateTime endDate, string[] paths, string krs, string ceidg);
+    Task LoadForm(string businessAddresses, string city, string pkd, string nrRachunku, int liczbaZatrudnionych, ContactPerson contactPerson, DateTime startDate, DateTime endDate, string[] paths, string krs, string ceidg, string ris, string aypNip, Adres siedziba);
     Task<string> DownloadComapnyByNipPdf(string nip);
     void ProvideWorkerInformation(ExcelWorkersRow row, string city);
     void LoadPlanowanyRealizator();
-    void LoadInfomacjeDotyczaceKsztalcenia(ExcelWorksheet row, DataTable? listaSzkolen, DataTable? pracownicy);
+    void LoadInfomacjeDotyczaceKsztalcenia(ExcelWorksheet row, DataTable? listaSzkolen, DataTable? pracownicy, string uzasadnienie);
     void LoadEndOfForm();
+    void ValidateWorkers();
+    void ZrobWydruk();
 }
 
 public class SeleniumService : ISeleniumService, IDisposable
@@ -42,6 +53,36 @@ public class SeleniumService : ISeleniumService, IDisposable
     {
         _driverService = DriverService.Instance;
         (_chromeDriver, _webDriverWait) = _driverService.GetDriver();
+    }
+
+    public string DownloadAypRis()
+    {
+        try
+        {
+            InitializeDriver();
+            _chromeDriver.Navigate().GoToUrl("https://stor.praca.gov.pl/api/ris/szczegoly/pdf/60002");
+            var path = Path.Combine(Path.GetTempPath() + "ayp");
+            var files = Directory.GetFiles(path);
+
+            if (files.Length == 0)
+            {
+                throw new Exception("AYP_RIS nie został pobrany!");
+            }
+
+            var latestFile = files
+                   .Select(file => new FileInfo(file))
+                   .OrderByDescending(fileInfo => fileInfo.LastWriteTime)
+                   .First();
+
+            string newFileName = Path.Combine(latestFile.DirectoryName, $"AYP_RIS" + ".pdf");
+            File.Move(latestFile.FullName, newFileName);
+            return newFileName;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+            throw;
+        }
     }
 
     public void LoginToPage()
@@ -85,87 +126,128 @@ public class SeleniumService : ISeleniumService, IDisposable
         }
     }
 
-    public async Task LoadForm(string businessAddresses, string city, string pkd, string nrRachunku, int liczbaZatrudnionych, ContactPerson contactPerson, DateTime startDate, DateTime endDate, string[] paths, string krs, string ceidg)
+    public async Task LoadForm(string businessAddresses, string city, string pkd, string nrRachunku, int liczbaZatrudnionych, ContactPerson contactPerson, DateTime startDate, DateTime endDate,
+        string[] paths, string krs, string ceidg, string ris, string aypNip, Adres siedziba)
     {
         try
         {
-            InitializeDriver();
-            var startForm = By.CssSelector("div.formularz fieldset");
-            var uczestnicyForm = By.CssSelector("div[data-psz-kfs-uczestnicy]");
-
             var wait = new WebDriverWait(_chromeDriver, TimeSpan.FromMinutes(5));
-            wait.Until(ExpectedConditions.ElementIsVisible(startForm));
-
-            ExecuteKursyRadioButton();
-
-            _chromeDriver.ExecuteScript(
-                "document.querySelector('button[data-ng-click=\"zapiszForme()\"]').click()");
-
-            wait.Until(ExpectedConditions.ElementIsVisible(uczestnicyForm));
-
-            var element = _chromeDriver.FindElement(By.CssSelector("label.nazwaUrzedu-gf"));
-            element.SendKeys(city);
-
-            var address = FuzzHelpers.GetAddress(businessAddresses, city);
-            //wyciagnac kod pocztowy
-            var kodPocztowy = _chromeDriver.ExecuteAsyncScript($"document.querySelector('label.kod-pocztowy-gf input').value = '{address}'");
-            _chromeDriver.ExecuteAsyncScript("document.querySelector('label.kod-pocztowy-gf input').dispatchEvent(new Event('input', {bubbles: true })) ");
-
-            ExecuteInputByName("dane.podmiot.adresSiedziby.ulica", address);
-            ExecuteInputByName("dane.podmiot.adresSiedziby.nrDomu", address);
-            if (address is not null)
+            try
             {
-                ExecuteInputByName("dane.podmiot.adresSiedziby.nrLokalu", address);
-            }
+                InitializeDriver();
+                var startForm = By.CssSelector("div.formularz fieldset");
+                var uczestnicyForm = By.CssSelector("div[data-psz-kfs-uczestnicy]");
 
-            //Wyciagnąć miasto
-            var text = _chromeDriver.ExecuteAsyncScript("document.querySelector('label input#miejscowoscSelectId4sgSelectInputId').value").ToString().Trim();
-            if (text != city)
-            {
-                ExecuteCheckbox("miejsceDzialalnosciInne");
+                wait.Until(ExpectedConditions.ElementExists(startForm));
 
-                var kodPocztowyPowiazanyZPUP = _chromeDriver.ExecuteAsyncScript($"document.querySelector('label.kod-pocztowy-gf input#kodPocztowyInputId1').value = '{address}'");
-                _chromeDriver.ExecuteAsyncScript("document.querySelector('label.kod-pocztowy-gf input#kodPocztowyInputId1').dispatchEvent(new Event('input', {bubbles: true })) ");
+                ExecuteKursyRadioButton();
 
-                ExecuteInputByName("dane.podmiot.miejsceDzialalnosci.ulica", address);
-                ExecuteInputByName("dane.podmiot.miejsceDzialalnosci.nrDomu", address);
-                if (address is not null)
+                _chromeDriver.ExecuteScript(
+                    "document.querySelector('button[data-ng-click=\"zapiszForme()\"]').click()");
+
+                wait.Until(ExpectedConditions.ElementIsVisible(uczestnicyForm));
+
+                ExecuteInputByName("dane.miejscowosc", city);
+
+                var address = FuzzHelpers.GetAddress(businessAddresses, city);
+
+                var addressModel = AddressHelpers.GetAddress(address);
+
+                if (siedziba.KodPocztowy is not null)
                 {
-                    ExecuteInputByName("dane.podmiot.miejsceDzialalnosci.nrLokalu", address);
+                    var kodPocztowy = _chromeDriver.ExecuteScript($"document.querySelector('label.kod-pocztowy-gf input').value = '{siedziba.KodPocztowy}'");
+                    _chromeDriver.ExecuteScript("document.querySelector('label.kod-pocztowy-gf input').dispatchEvent(new Event('input', {bubbles: true })) ");
+
+                    ExecuteInputByName("dane.podmiot.adresSiedziby.ulica", AddressHelpers.ExtractStreet(siedziba.Ulica));
+                    ExecuteInputByName("dane.podmiot.adresSiedziby.nrDomu", siedziba.NrDomu);
+                    if (!string.IsNullOrWhiteSpace(siedziba.NrLokalu))
+                    {
+                        ExecuteInputByName("dane.podmiot.adresSiedziby.nrLokalu", siedziba.NrLokalu);
+                    }
                 }
+                else
+                {
+                    var kodPocztowy = _chromeDriver.ExecuteScript($"document.querySelector('label.kod-pocztowy-gf input').value = '{addressModel.Code}'");
+                    _chromeDriver.ExecuteScript("document.querySelector('label.kod-pocztowy-gf input').dispatchEvent(new Event('input', {bubbles: true })) ");
+
+                    ExecuteInputByName("dane.podmiot.adresSiedziby.ulica", addressModel.Street);
+                    ExecuteInputByName("dane.podmiot.adresSiedziby.nrDomu", addressModel.HouseNumber);
+                    if (!string.IsNullOrWhiteSpace(addressModel.FlatNumber))
+                    {
+                        ExecuteInputByName("dane.podmiot.adresSiedziby.nrLokalu", addressModel.FlatNumber);
+                    }
+                }
+                if (siedziba.Miejscowosc.ToLower() != city)
+                {
+                    //Wyciagnąć miasto
+                    var text = _chromeDriver.FindElement(By.CssSelector("label input#miejscowoscSelectId4sgSelectInputId"));
+                    var textValue = text.GetAttribute("value");
+                    if (textValue.Trim() != city)
+                    {
+                        ExecuteCheckbox("dane.podmiot.miejsceDzialalnosciInne");
+
+                        var kodPocztowyPowiazanyZPUP = _chromeDriver.ExecuteScript($"document.querySelector('label.kod-pocztowy-gf input#kodPocztowyInputId1').value = '{addressModel.Code}'");
+                        _chromeDriver.ExecuteScript("document.querySelector('label.kod-pocztowy-gf input#kodPocztowyInputId1').dispatchEvent(new Event('input', {bubbles: true })) ");
+
+                        ExecuteInputByName("dane.podmiot.miejsceDzialalnosci.ulica", addressModel.Street);
+                        ExecuteInputByName("dane.podmiot.miejsceDzialalnosci.nrDomu", addressModel.HouseNumber);
+                        if (!string.IsNullOrWhiteSpace(addressModel.FlatNumber))
+                        {
+                            ExecuteInputByName("dane.podmiot.miejsceDzialalnosci.nrLokalu", addressModel.FlatNumber);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
             }
 
             SelectAutocompleteOptionWithRetryPKD(pkd);
-            ExecuteInputByName("podmiotNrKonta", nrRachunku);
+
+            ExecuteInputByName("dane.podmiot.nrKonta", nrRachunku);
+
             ExecuteInputByName("dane.podmiot.zatrudnieni.liczba", liczbaZatrudnionych.ToString());
+
             if (liczbaZatrudnionych > 10)
             {
                 ExecuteCheckbox("dane.podmiot.zatrudnieni.mikro");
             }
-
             ExecuteInputByName("dane.podmiot.osobaKontakt.imie", contactPerson.Name.Split(' ')[0]);
             ExecuteInputByName("dane.podmiot.osobaKontakt.nazwisko", contactPerson.Name.Split(' ')[1]);
             ExecuteInputByName("dane.podmiot.osobaKontakt.stanowisko", contactPerson.Position);
             ExecuteInputByName("dane.podmiot.osobaKontakt.telefon", contactPerson.Phone);
             ExecuteInputByName("dane.podmiot.osobaKontakt.adresEMail", contactPerson.Email);
 
-            _chromeDriver.ExecuteAsyncScript("document.querySelector(\"input[data-ng-model='dane.koszty.zrodloSrodkow']\").click()");
+            _chromeDriver.ExecuteScript("document.querySelector(\"input[data-ng-model='dane.koszty.zrodloSrodkow']\").click()");
 
-            ExecuteInputByName("dane.termin.dataOd", startDate.ToString());
-            ExecuteInputByName("dane.termin.dataDo", endDate.ToString());
+            ExecuteInputByName("dane.termin.dataOd", startDate.ToShortDateString());
+            ExecuteInputByName("dane.termin.dataDo", endDate.ToShortDateString());
+
+
+            LoadEndOfForm();
 
             var p = PathHelpers.GetRightPath(paths);
             if (!string.IsNullOrEmpty(p?.Error?.Message))
             {
-                throw new Exception(p.Error.Message);
+                //throw new Exception(p.Error.Message);
             }
-            if (p.Value.ContainsKey(PathHelpers.OŚWIADCZENIE_DE_MINIMIS))
-            {
-                ExecuteDragAndDrop("kontrolkaZalacznikow1", p.Value[PathHelpers.OŚWIADCZENIE_DE_MINIMIS].First());
-            }
-            else { ExecuteDragAndDrop("kontrolkaZalacznikow1", p.Value[PathHelpers.DE_MINIMIS].First()); }
 
-            ExecuteDragAndDrop("kontrolkaZalacznikow2", p.Value[PathHelpers.OŚWIADCZENIE_CERTYFIKAT_KOMPLET].First());
+            ExecuteDragAndDrop("kontrolkaZalacznikow1", p.Value[PathHelpers.DE_MINIMIS].First());
+            ExecuteDragAndDrop("kontrolkaZalacznikow2", p.Value[PathHelpers.OŚWIADCZENIE_DE_MINIMIS].First());
+
+            if (p.Value.ContainsKey(PathHelpers.PEŁNOMOCNICTWO))
+            {
+                try
+                {
+                    _chromeDriver.ExecuteScript("document.querySelectorAll('label.checkbox input[data-ng-model=\"zalacznik.dolaczony\"]')[5].click()");
+                }
+                catch
+                {
+
+                }
+                ExecuteDragAndDropPELNOMOCNICTWO("kontrolkaZalacznikow6", p.Value[PathHelpers.PEŁNOMOCNICTWO].First());
+            }
 
             if (string.IsNullOrEmpty(krs))
             {
@@ -175,43 +257,48 @@ public class SeleniumService : ISeleniumService, IDisposable
             {
                 ExecuteDragAndDrop("kontrolkaZalacznikow3", krs);
             }
-            if (p.Value[PathHelpers.PROGRAM].Count > 1)
+
+            if (p.Value[PathHelpers.PROGRAM].Count > 1 && p.Value.ContainsKey(PathHelpers.ZAKRES_EGZAMINU))
             {
-                ExecuteDragAndDrop("kontrolkaZalacznikow4", p.Value[PathHelpers.PROGRAM].ToArray());
+                var array = p.Value[PathHelpers.PROGRAM].ToList();
+                array.AddRange(p.Value[PathHelpers.ZAKRES_EGZAMINU]);
+                ExecuteDragAndDrop("kontrolkaZalacznikow4", array.ToArray());
             }
             else
             {
-                ExecuteDragAndDrop("kontrolkaZalacznikow4", p.Value[PathHelpers.PROGRAM].First());
+                ExecuteDragAndDrop("kontrolkaZalacznikow4", p.Value[PathHelpers.PROGRAM].ToArray());
             }
 
             ExecuteDragAndDrop("kontrolkaZalacznikow5", p.Value[PathHelpers.WZÓR_CERTYFIKATU].First());
 
-            if (p.Value.ContainsKey(PathHelpers.PEŁNOMOCNICTWO))
+            if (p.Value.ContainsKey(PathHelpers.OŚWIADCZENIE_CERTYFIKAT_KOMPLET))
             {
-                ExecuteCheckbox("zalacznik.dolaczony");
-                ExecuteDragAndDrop("kontrolkaZalacznikow6", p.Value[PathHelpers.PEŁNOMOCNICTWO].First());
+                _chromeDriver.ExecuteScript("document.querySelector('button[data-ng-click=\"dodajZalacznikUzytkownika()\"]').click()");
+                var values = p.Value[PathHelpers.OŚWIADCZENIE_CERTYFIKAT_KOMPLET].ToList();
+                values.Add(ris);
+                values.Add(aypNip);
+
+                ExecuteAdditionalAttachment(values.ToList());
             }
             var dict = new Dictionary<int, string>();
             var count = 0;
 
-            _webDriverWait.Until(ExpectedConditions.ElementIsVisible(By.CssSelector("button[data-ng-click=\"dodajZalacznikUzytkownika()\"]")));
-
             if (p.Value.ContainsKey(PathHelpers.NIP8))
             {
-                _chromeDriver.ExecuteScript("document.querySelector('button[data-ng-click=\"dodajZalacznikUzytkownika()\"]').click()");
                 dict.Add(count, p.Value[PathHelpers.NIP8].First());
             }
             if (p.Value.ContainsKey(PathHelpers.CIT))
             {
-                _chromeDriver.ExecuteScript("document.querySelector('button[data-ng-click=\"dodajZalacznikUzytkownika()\"]').click()");
-                dict.Add(count, p.Value[PathHelpers.CIT].First());
+                dict.Add(++count, p.Value[PathHelpers.CIT].First());
             }
             if (p.Value.ContainsKey(PathHelpers.UMOWA_NAJMU_LOKALIZACJA))
             {
-                _chromeDriver.ExecuteScript("document.querySelector('button[data-ng-click=\"dodajZalacznikUzytkownika()\"]').click()");
-                dict.Add(count, p.Value[PathHelpers.UMOWA_NAJMU_LOKALIZACJA].First());
+                dict.Add(++count, p.Value[PathHelpers.UMOWA_NAJMU_LOKALIZACJA].First());
             }
-            ExecuteAdditionalAttachment(dict.Values.ToList());
+
+            _chromeDriver.ExecuteScript("document.querySelector('button[data-ng-click=\"dodajZalacznikUzytkownika()\"]').click()");
+
+            ExecuteDragAndDropAdditional2("", dict.Values.ToArray());
 
             var addWorkerButton = By.Id("tabela-uczestnik");
             wait.Until(ExpectedConditions.ElementIsVisible(addWorkerButton));
@@ -219,6 +306,7 @@ public class SeleniumService : ISeleniumService, IDisposable
         catch (Exception ex)
         {
             Console.WriteLine(ex.Message);
+            throw;
         }
     }
 
@@ -295,6 +383,19 @@ public class SeleniumService : ISeleniumService, IDisposable
             ExecuteCheckbox("uczestnik.typKsztalcenia.awansZawodowy");
             ExecuteCheckbox("uczestnik.typKsztalcenia.rozszerzenieObowiazkow");
             ExecuteCheckbox("uczestnik.typKsztalcenia.kompetencjeZawodowe");
+
+            if (DateTime.TryParse(row.Data[WorkersFormKeys.OkresZatrudnieniaDo].ToString(), out var parsed))
+            {
+                ExecuteCheckbox("uczestnik.typKsztalcenia.przedluzenieZatrudnienia");
+            }
+            else
+            {
+                ExecuteCheckbox("uczestnik.typKsztalcenia.utrzymanieZatrudnienia");
+            }
+
+            _chromeDriver.ExecuteScript("document.querySelector('textarea[data-ng-model=\"uczestnik.uzasadnieniePotrzeb\"]').value = 'Do uzupełnienia'");
+            _chromeDriver.ExecuteScript("document.querySelector('textarea[data-ng-model=\"uczestnik.uzasadnieniePotrzeb\"]').dispatchEvent(new Event('input', { bubbles: true }))");
+
             //SAVE
             _chromeDriver.ExecuteScript(
                 "document.querySelector('button[data-ng-click=\"zapiszUczestnika()\"]').click()");
@@ -342,7 +443,7 @@ public class SeleniumService : ISeleniumService, IDisposable
             ExecuteInput("realizator.pkd");
 
             Wait();
-            SelectAutocompleteOptionWithRetry();
+            SelectAutocompleteOptionWithRetryW("8559B");
 
             _chromeDriver.ExecuteScript(
                 """
@@ -376,7 +477,7 @@ public class SeleniumService : ISeleniumService, IDisposable
         }
     }
 
-    public void LoadInfomacjeDotyczaceKsztalcenia(ExcelWorksheet row, DataTable? listaSzkolen, DataTable? pracownicy)
+    public void LoadInfomacjeDotyczaceKsztalcenia(ExcelWorksheet row, DataTable? listaSzkolen, DataTable? pracownicy, string uzasadnienie)
     {
         try
         {
@@ -419,9 +520,35 @@ public class SeleniumService : ISeleniumService, IDisposable
                 ExecuteInputByName("dzialanie.liczbaGodzin.ilosc", liczbaGodzin);
                 ExecuteInputByName("dzialanie.cenaNetto", wartoscSzkolenia);
                 ExecuteInputByName("dzialanie.cenaBrutto", wartoscSzkolenia);
+                _chromeDriver.ExecuteScript("document.querySelector('button[data-ng-disabled=\"dzialanie.porownanieOfert.length >= 20\"]').click()");
+                ExecuteInputByName("porownanie.nazwa", "Brak");
+                ExecuteInputByName("porownanie.liczbaGodzin", "1");
+                ExecuteInputByName("porownanie.cenaNetto", "0,00");
+                ExecuteInputByName("porownanie.cenaBrutto", "0,00");
+
+                var doc = ReadWordToString(uzasadnienie);
+
+                string escapedDoc = JsonConvert.SerializeObject(doc.Substring(0, 1999)).Trim();
+
+                _chromeDriver.ExecuteScript($@"
+                var textArea = document.querySelector('textarea[data-ng-model=""dzialanie.uzasadnienie""]');
+                if (textArea) {{
+                    textArea.value = {escapedDoc};  // Set the value of the textarea
+                    var event = new Event('input', {{
+                        'bubbles': true,
+                        'cancelable': true
+                    }});
+                    textArea.dispatchEvent(event); 
+                }}");
+
+                _chromeDriver.ExecuteScript("document.querySelector('textarea[data-ng-model=\"dzialanie.uzasadnienie\"]').dispatchEvent(new Event('input', { bubbles: true }))");
+                _chromeDriver.ExecuteScript("document.querySelector('textarea[data-ng-model=\"dzialanie.uzasadnienie\"]').dispatchEvent(new Event('input', { bubbles: true }))");
 
                 PracownikPopupComparation(row, pracownicy, kształcenie);
             }
+            _chromeDriver.ExecuteScript("""
+                                        document.querySelector('div.panel-kontener button[data-ng-click="zapiszDzialanie()"]').click()
+                                        """);
             _chromeDriver.ExecuteScript("""
                                         document.querySelector('div.panel-kontener button[data-ng-click="zapiszRealizatora()"]').click()
                                         """);
@@ -430,6 +557,33 @@ public class SeleniumService : ISeleniumService, IDisposable
         {
             Console.WriteLine(ex);
         }
+    }
+    public static string ReadWordToString(string filePath)
+    {
+        StringBuilder text = new StringBuilder();
+
+        // Open the Word document
+        using (WordprocessingDocument wordDocument = WordprocessingDocument.Open(filePath, false))
+        {
+            // Access the main document part
+            var body = wordDocument.MainDocumentPart.Document.Body;
+
+            // Loop through all the paragraphs in the body of the document
+            foreach (var paragraph in body.Elements<Paragraph>())
+            {
+                // Concatenate the text of each paragraph into the result string
+                foreach (var run in paragraph.Elements<Run>())
+                {
+                    foreach (var textElement in run.Elements<Text>())
+                    {
+                        text.Append(textElement.Text);
+                    }
+                }
+                text.AppendLine(); // Add a new line after each paragraph
+            }
+        }
+
+        return text.ToString();
     }
 
     private void PracownikPopupComparation(ExcelWorksheet row, DataTable? pracownicy, string nazwa)
@@ -510,13 +664,13 @@ public class SeleniumService : ISeleniumService, IDisposable
             Console.WriteLine(ex.Message);
         }
     }
-    public void SelectAutocompleteOptionWithRetry(int maxRetries = 5, int retryDelayMs = 500)
+    public void SelectAutocompleteOptionWithRetry(string val, int maxRetries = 5, int retryDelayMs = 500)
     {
         try
         {
             // Set the input value and trigger the input event
             _chromeDriver.ExecuteScript(
-                "document.evaluate('//input[@data-sg-autocomplete=\"slowniki/PKD_2007\" and @data-ng-model=\"realizator.pkd\"]', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue.value = '8559B'");
+                $"document.evaluate('//input[@data-sg-autocomplete=\"slowniki/PKD_2007\" and @data-ng-model=\"realizator.pkd\"]', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue.value = '{val}'");
 
             // Trigger the input event to show the suggestions
             _chromeDriver.ExecuteScript(
@@ -528,7 +682,7 @@ public class SeleniumService : ISeleniumService, IDisposable
                 {
                     // Attempt to select the item
                     var listItemClickScript = $@"
-                const listItem = Array.from(document.querySelectorAll(""ul.ui-autocomplete li"")).find(el => el.textContent.trim() === ""8559B - Pozostałe pozaszkolne formy edukacji, gdzie indziej niesklasyfikowane"");
+                var listItem = Array.from(document.querySelectorAll(""ul.ui-autocomplete li"")).findLast(el => el.textContent.trim().startsWith(""{val}""));
                 if (listItem) {{
                     listItem.click();
                     return true;
@@ -565,24 +719,23 @@ public class SeleniumService : ISeleniumService, IDisposable
         {
             // Set the input value and trigger the input event
             _chromeDriver.ExecuteScript(
-                $"document.evaluate('//input[@data-sg-autocomplete=\"slowniki/PKD_2007\" and @data-ng-model=\"dane.podmiot.pkd\"]', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue.value = '{val}'");
+                $"document.querySelector('input[data-ng-model=\"dane.podmiot.pkd\"]').value = '{val}'");
 
-            // Trigger the input event to show the suggestions
-            _chromeDriver.ExecuteScript(
-                "document.evaluate('//input[@data-sg-autocomplete=\"slowniki/PKD_2007\" and @data-ng-model=\"dane.podmiot.pkd\"]', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue.dispatchEvent(new Event('input', { bubbles: true }));");
-            // Retry finding and clicking the list item up to `maxRetries` times
             for (int attempt = 0; attempt < maxRetries; attempt++)
             {
                 try
                 {
-                    // Attempt to select the item
+                    _chromeDriver.ExecuteScript("document.querySelector('input[data-ng-model=\"dane.podmiot.pkd\"]').dispatchEvent(new Event('input', { bubbles: true }))");
+
+                    _chromeDriver.ExecuteScript("document.querySelector('input[data-ng-model=\"dane.podmiot.pkd\"]').closest('div.sg-autocomplete')?.querySelector('span.sg-autocomplete-ikona').click()");
+
                     var listItemClickScript = $@"
-                var listItem2 = Array.from(document.querySelectorAll(""ul.ui-autocomplete li"")).find(el => el.textContent.trim() === ""{val}"");
-                if (listItem2) {{
-                    listItem.click();
-                    return true;
-                }}
-                return false;
+                    var listItem2 = Array.from(document.querySelectorAll(""ul.ui-autocomplete li"")).find(el => el.textContent.trim().startsWith(""{val}""));
+                    if (listItem2) {{
+                        listItem2.click();
+                        return true;
+                    }}
+                    return false;
             ";
 
                     bool clicked = (bool)_chromeDriver.ExecuteScript(listItemClickScript);
@@ -599,7 +752,7 @@ public class SeleniumService : ISeleniumService, IDisposable
                 }
 
                 // Wait a short period before retrying
-                Thread.Sleep(retryDelayMs);
+                Task.Delay(400).Wait();
             }
         }
         catch (Exception ex)
@@ -607,7 +760,53 @@ public class SeleniumService : ISeleniumService, IDisposable
             Console.WriteLine(ex.Message);
         }
     }
+    public void SelectAutocompleteOptionWithRetryW(string val, int maxRetries = 5, int retryDelayMs = 500)
+    {
+        try
+        {
+            // Set the input value and trigger the input event
+            _chromeDriver.ExecuteScript(
+                $"document.querySelector('input[data-ng-model=\"realizator.pkd\"]').value = '{val}'");
 
+            for (int attempt = 0; attempt < maxRetries; attempt++)
+            {
+                try
+                {
+                    _chromeDriver.ExecuteScript("document.querySelector('input[data-ng-model=\"realizator.pkd\"]').dispatchEvent(new Event('input', { bubbles: true }))");
+
+                    _chromeDriver.ExecuteScript("document.querySelector('input[data-ng-model=\"realizator.pkd\"]').closest('div.sg-autocomplete')?.querySelector('span.sg-autocomplete-ikona').click()");
+
+                    var listItemClickScript = $@"
+                    var listItem = Array.from(document.querySelectorAll(""ul.ui-autocomplete li"")).findLast(el => el.textContent.trim().startsWith(""{val}""));
+                    if (listItem) {{
+                        listItem.click();
+                        return true;
+                    }}
+                    return false;
+            ";
+
+                    bool clicked = (bool)_chromeDriver.ExecuteScript(listItemClickScript);
+
+                    if (clicked)
+                    {
+                        Console.WriteLine("Autocomplete option clicked successfully.");
+                        break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Attempt {attempt + 1} failed: {ex.Message}");
+                }
+
+                // Wait a short period before retrying
+                Task.Delay(400).Wait();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+    }
     private void ExecuteInputByName(string name, string inputValue)
     {
         try
@@ -890,18 +1089,56 @@ public class SeleniumService : ISeleniumService, IDisposable
         ExecuteCheckbox("dane.oswiadczenie.pkt5");
         ExecuteCheckbox("dane.oswiadczenie.pkt6");
     }
+    void ExecuteDragAndDropPELNOMOCNICTWO(string dropzoneId, string path)
+    {
+        try
+        {
+            var dropzoneElement = _chromeDriver.ExecuteScript("return document.querySelectorAll('label.checkbox input[data-ng-model=\"zalacznik.dolaczony\"]')[5].parentNode.parentNode.parentNode.querySelector('div[data-ng-model=\"zalacznik.zalaczniki\"]').id");
+            var name = path[(path.LastIndexOf('\\') + 1)..];
+            var bytes = File.ReadAllBytes(path);
+            var base64String = Convert.ToBase64String(bytes);
 
+            _chromeDriver.ExecuteScript(
+                $$"""
+              var dropzone = document.querySelector('div#{{dropzoneElement}} div#dropzone');
+              if (dropzone) {
+                  var byteCharacters = atob("{{base64String}}");
+                  var byteArray = new Uint8Array(byteCharacters.length);
+              
+                  for (var i = 0; i < byteCharacters.length; i++) {
+                      byteArray[i] = byteCharacters.charCodeAt(i);
+                  }
+              
+                  var file = new File([byteArray], "{{name}}", { type: 'application/pdf' });
+                  var dataTransfer = new DataTransfer();
+                  dataTransfer.items.add(file);
+                  var event = new DragEvent('drop', {
+                      dataTransfer: dataTransfer
+                  });
+                  dropzone.dispatchEvent(event);
+              } else {
+                  throw new Error('Dropzone element not found');
+              }
+              """);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+    }
     void ExecuteDragAndDrop(string dropzoneId, string path)
     {
-        var dropzoneElement = _webDriverWait.Until(d => d.FindElement(By.CssSelector($"div#{dropzoneId}")));
-        var name = path[(path.LastIndexOf('\\') + 1)..];
-        var bytes = File.ReadAllBytes(path);
-        var base64String = Convert.ToBase64String(bytes);
+        try
+        {
+            var dropzoneElement = _webDriverWait.Until(d => d.FindElement(By.CssSelector($"div#{dropzoneId}")));
+            var name = path[(path.LastIndexOf('\\') + 1)..];
+            var bytes = File.ReadAllBytes(path);
+            var base64String = Convert.ToBase64String(bytes);
 
-        _chromeDriver.ExecuteScript(
-            $$"""
+            _chromeDriver.ExecuteScript(
+                $$"""
               var {{dropzoneId}} = document.querySelector('div#{{dropzoneId}} div#dropzone');
-              if (dropzone) {
+              if ({{dropzoneId}}) {
                   var byteCharacters = atob("{{base64String}}");
                   var byteArray = new Uint8Array(byteCharacters.length);
               
@@ -920,6 +1157,11 @@ public class SeleniumService : ISeleniumService, IDisposable
                   throw new Error('Dropzone element not found');
               }
               """);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
     }
 
     void ExecuteDragAndDrop(string dropzoneId, string[] paths)
@@ -971,29 +1213,193 @@ public class SeleniumService : ISeleniumService, IDisposable
           """
         );
     }
+    void ExecuteDragAndDropAdditional(string dropzoneId, string[] paths)
+    {
+        var id = _chromeDriver.ExecuteScript("return document.querySelectorAll('div[data-ng-model=\"zalacznik.zalaczniki\"]')[6].id");
+        _chromeDriver.ExecuteScript("document.querySelector('textarea[data-ng-model=\"zalacznik.opis\"]').value = 'KRS AYP + RIS + CERTYFIKATY'");
+        _chromeDriver.ExecuteScript("document.querySelector('textarea[data-ng-model=\"zalacznik.opis\"]').dispatchEvent(new Event('input'), {bubbles:true})");
+        var filesData = paths.Select(path =>
+        {
+            var name = path[(path.LastIndexOf('\\') + 1)..];
+            var bytes = File.ReadAllBytes(path);
+            var base64String = Convert.ToBase64String(bytes);
+            return new { name, base64String };
+        }).ToArray();
+
+        var jsFilesArray = filesData.Select(file =>
+            $$"""
+          {
+              name: "{{file.name}}",
+              content: "{{file.base64String}}"
+          }
+        """
+        ).Aggregate((a, b) => $"{a},{b}");
+
+        _chromeDriver.ExecuteScript(
+            $$"""
+          var dropzone = document.querySelector('div#{{id}} div#dropzone');
+          if (dropzone) {
+              var files = [{{jsFilesArray}}].map(file => {
+                  var byteCharacters = atob(file.content);
+                  var byteArray = new Uint8Array(byteCharacters.length);
+
+                  for (var i = 0; i < byteCharacters.length; i++) {
+                      byteArray[i] = byteCharacters.charCodeAt(i);
+                  }
+
+                  return new File([byteArray], file.name, { type: 'application/pdf' });
+              });
+
+              var dataTransfer = new DataTransfer();
+              files.forEach(file => dataTransfer.items.add(file));
+
+              var event = new DragEvent('drop', {
+                  dataTransfer: dataTransfer
+              });
+              dropzone.dispatchEvent(event);
+          } else {
+              throw new Error('Dropzone element not found');
+          }
+          """
+        );
+    }
+
+    void ExecuteDragAndDropAdditional2(string dropzoneId, string[] paths)
+    {
+        var names = string.Join(" + ", paths.Select(x => Path.GetFileNameWithoutExtension(x)));
+        var id = _chromeDriver.ExecuteScript("return document.querySelectorAll('div[data-ng-model=\"zalacznik.zalaczniki\"]')[7].id");
+        _chromeDriver.ExecuteScript($"document.querySelectorAll('textarea[data-ng-model=\"zalacznik.opis\"]')[1].value = '{names}'");
+        _chromeDriver.ExecuteScript("document.querySelectorAll('textarea[data-ng-model=\"zalacznik.opis\"]')[1].dispatchEvent(new Event('input', {bubbles:true}))");
+        var filesData = paths.Select(path =>
+        {
+            var name = path[(path.LastIndexOf('\\') + 1)..];
+            var bytes = File.ReadAllBytes(path);
+            var base64String = Convert.ToBase64String(bytes);
+            return new { name, base64String };
+        }).ToArray();
+
+        var jsFilesArray = filesData.Select(file =>
+            $$"""
+          {
+              name: "{{file.name}}",
+              content: "{{file.base64String}}"
+          }
+        """
+        ).Aggregate((a, b) => $"{a},{b}");
+
+        _chromeDriver.ExecuteScript(
+            $$"""
+          var dropzone = document.querySelector('div#{{id}} div#dropzone');
+          if (dropzone) {
+              var files = [{{jsFilesArray}}].map(file => {
+                  var byteCharacters = atob(file.content);
+                  var byteArray = new Uint8Array(byteCharacters.length);
+
+                  for (var i = 0; i < byteCharacters.length; i++) {
+                      byteArray[i] = byteCharacters.charCodeAt(i);
+                  }
+
+                  return new File([byteArray], file.name, { type: 'application/pdf' });
+              });
+
+              var dataTransfer = new DataTransfer();
+              files.forEach(file => dataTransfer.items.add(file));
+
+              var event = new DragEvent('drop', {
+                  dataTransfer: dataTransfer
+              });
+              dropzone.dispatchEvent(event);
+          } else {
+              throw new Error('Dropzone element not found');
+          }
+          """
+        );
+    }
 
     void ExecuteAdditionalAttachment(List<string> paths)
     {
-        var elements = _chromeDriver.FindElements(By.CssSelector("div[data-ng-repeat='zalacznik in zalaczniki track by $index']"));
-        if (elements.Count > 1)
-        {
-            var elementsToAdd = elements.Where(x => x.Text.StartsWith("Opis załącznika:")).ToList();
-            var constInt = 7;
+        string pathNames = string.Join(" + ", paths.Select(x => Path.GetFileName(x)));
 
-            for (int i = 0; i < elementsToAdd.Count; i++)
+        _chromeDriver.ExecuteScript($"document.querySelectorAll('div[data-ng-model=\"zalacznik.zalaczniki\"]')[6].parentNode.parentNode.querySelector(\"textarea[data-ng-model='zalacznik.opis']\").value = '{pathNames}'");
+        ExecuteDragAndDropAdditional("", paths.ToArray());
+    }
+
+    public void ValidateWorkers()
+    {
+        try
+        {
+            bool flag = true;
+            do
             {
-                var name = Path.GetFileName(paths[i]);
-                var textarea = elementsToAdd[i].FindElement(By.CssSelector("textarea[data-ng-model='zalacznik.opis']"));
-                textarea.Clear();
-                textarea.SendKeys($"{name}");
+                // Get the number of nodes (rows to process)
+                var nodes = (long)_chromeDriver.ExecuteScript("return document.querySelectorAll('div#tabela-uczestnik td.tabela-selektor').length");
 
-                ExecuteDragAndDrop($"kontrolkaZalacznikow{constInt}", paths[i]);
-                ++constInt;
-            }
+                if (nodes == 0)
+                {
+                    break;
+                }
+                for (int i = 0; i < nodes; i++)
+                {
+                    // Wait for the edit button to be available
+                    _webDriverWait.Until(driver =>
+                        _chromeDriver.ExecuteScript("return document.querySelector('button[data-ng-click=\"editRow()\"]')") != null);
+
+                    // Click on the current row selector
+                    _chromeDriver.ExecuteScript($"document.querySelectorAll('div#tabela-uczestnik td.tabela-selektor')[{i}].click()");
+
+                    // Click the edit button
+                    _chromeDriver.ExecuteScript("document.querySelector('button[data-ng-click=\"editRow()\"]').click()");
+
+                    // Perform calculations and save changes
+                    _chromeDriver.ExecuteScript("""var value = document.querySelector('input[data-ng-model=\"uczestnik.wydatki.srodkiKfs\"]').value;var parsedDouble = parseFloat(value.replace(',', '.').trim());var percent = parsedDouble * 0.20;document.querySelector('input[data-ng-model=\"uczestnik.wydatki.wkladWlasny\"]').value = percent.toString().replace('.', ',');""");
+                    _chromeDriver.ExecuteScript("document.querySelector(\"input[data-ng-model='uczestnik.wydatki.wkladWlasny']\").dispatchEvent(new Event('input', {bubbles:true}));document.querySelector('button[data-ng-click=\"zapiszUczestnika()\"]').click();");
+                    // After every 10 iterations, check for and click the button
+                    if ((i + 1) % 10 == 0 || i == nodes - 1)
+                    {
+                        // Check if the button is visible
+                        var isButtonVisible = (bool)_chromeDriver.ExecuteScript(
+                        """
+                    var button = document.querySelector('button[ng-click="changePage(pageIndex + 1)"]');
+                    return button.getAttribute('class') === 'disabled';
+                    """
+                        );
+                        if (isButtonVisible)
+                        {
+                            flag = false;
+                            break;
+                        }
+                        // Click the button if it's visible
+                        if (!isButtonVisible)
+                        {
+                            _chromeDriver.ExecuteScript("document.querySelector('button[ng-click=\"changePage(pageIndex + 1)\"]').click()");
+
+                            // Wait for any potential data refresh or UI updates
+                            _webDriverWait.Until(driver =>
+                                (bool)_chromeDriver.ExecuteScript("return document.readyState === 'complete';")
+                            );
+                            var isButtonVisible2 = (bool)_chromeDriver.ExecuteScript(
+                                """
+                            var button = document.querySelector('button[ng-click="changePage(pageIndex + 1)"]');
+                            return button.getAttribute('class') === 'disabled';
+                            """);
+                            if (isButtonVisible2)
+                            {
+                                break; // Exit the loop to recheck nodes after refresh
+                            }
+                        }
+                    }
+                }
+
+            } while (flag);
         }
-        else
+        catch (Exception ex)
         {
-            Console.WriteLine("Brak Elementów w Załącznikach!");
+            Console.WriteLine(ex.Message);
         }
+    }
+
+    public void ZrobWydruk()
+    {
+        _chromeDriver.ExecuteScript("document.querySelector(\"button[data-ng-click='$parent.wydruk()']\").click()");
     }
 }

@@ -1,4 +1,6 @@
-﻿using WinFormsAutoFiller.Infrastructure;
+﻿using System.Text.RegularExpressions;
+
+using WinFormsAutoFiller.Infrastructure;
 using WinFormsAutoFiller.Models.RegexEntity;
 using WinFormsAutoFiller.Utilis;
 
@@ -31,6 +33,32 @@ namespace WinFormsAutoFiller.Helpers
             catch
             {
                 return Errors.IncorrectCityOrDate;
+            }
+        }
+
+        public static CityAndDateModel GetNameFromExcel(string input)
+        {
+            try
+            {
+                var cityAndDate = RegexPatterns.GetCityAndDateExcel().Match(input);
+                if (cityAndDate.Success)
+                {
+                    var city = cityAndDate.Groups[1].Value;
+                    var date = cityAndDate.Groups[2].Value;
+                    if (DateTime.TryParse(date, out var dateParsed))
+                    {
+                        return new CityAndDateModel
+                        {
+                            City = city,
+                            StartDate = dateParsed
+                        };
+                    }
+                }
+                return null;
+            }
+            catch
+            {
+                return null;
             }
         }
 
@@ -89,6 +117,37 @@ namespace WinFormsAutoFiller.Helpers
             {
                 return string.Empty;
             }
+        }
+        public static string ExtractMatch(string input, string pattern)
+        {
+            Match match = Regex.Match(input, pattern, RegexOptions.IgnoreCase);
+            return match.Success ? match.Value : null;
+        }
+
+        public static string FindMatchInWorksheets(string target, List<string> worksheets)
+        {
+            foreach (var sheet in worksheets)
+            {
+                if (IsMatch(target, sheet))
+                {
+                    return sheet; // Exact match
+                }
+            }
+            return null; // No match found
+        }
+
+        public static bool IsMatch(string str1, string str2)
+        {
+            string normalized1 = NormalizeString(str1);
+            string normalized2 = NormalizeString(str2);
+
+            return normalized1 == normalized2;
+        }
+
+        public static string NormalizeString(string input)
+        {
+            string withoutSeparators = Regex.Replace(input, @"[_\.\s]", "");
+            return withoutSeparators.ToLower();
         }
     }
 }

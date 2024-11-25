@@ -1,4 +1,6 @@
-﻿using ExcelDataReader;
+﻿using ClosedXML.Excel;
+
+using ExcelDataReader;
 
 using FormFiller.Constants;
 using FormFiller.Models;
@@ -25,6 +27,7 @@ public interface IFileReader
     Task<List<string>> GetExcelWorksheetNames(string fileName);
     Result<string, Error> FindWordInWordDocument(string fileName);
     Result<CompanyFormData, Error> FindObjectInExcelDocument(string filename);
+    List<string> ReadColumnFromExcel(string filePath, string sheetName, string firstCellName);
 }
 
 public class FileReader : IFileReader
@@ -160,6 +163,51 @@ public class FileReader : IFileReader
             var header = headers[col - startIndex];
             var cellValue = worksheet.Cells[rowCount, col].Text;
             excelRow.Data[header] = cellValue;
+        }
+
+        return excelRow;
+    }
+
+    public ExcelWorkersRow? ReadExcelRow(DataTable table, int rowIndex)
+    {
+        if (table == null || rowIndex < 0 || rowIndex >= table.Rows.Count)
+        {
+            return null; // Return null if the table is null or the specified rowIndex is invalid
+        }
+
+        var headers = new List<string>();
+        foreach (DataColumn column in table.Columns)
+        {
+            headers.Add(column.ColumnName);
+        }
+
+        // Read the specified row's data
+        var excelRow = new ExcelWorkersRow();
+        var dataRow = table.Rows[rowIndex];
+
+        foreach (var header in headers)
+        {
+            var cellValue = dataRow[header]?.ToString() ?? string.Empty;
+            excelRow.Data[header] = cellValue;
+        }
+
+        return excelRow;
+    }
+    public ExcelWorkersRow? ReadExcelRow(DataRow dataRow)
+    {
+        if (dataRow == null)
+        {
+            return null; // Return null if the DataRow is null
+        }
+
+        var excelRow = new ExcelWorkersRow();
+
+        // Iterate over the columns in the DataRow
+        foreach (DataColumn column in dataRow.Table.Columns)
+        {
+            var columnName = column.ColumnName;
+            var cellValue = dataRow[column]?.ToString() ?? string.Empty;
+            excelRow.Data[columnName] = cellValue; // Assuming Data is a Dictionary or similar structure
         }
 
         return excelRow;
@@ -320,6 +368,9 @@ public class FileReader : IFileReader
                         case "adres email":
                             formData.PUPContact.Email = value;
                             break;
+                        case "stanowisko":
+                            formData.PUPContact.Position = value;
+                            break;
                         case "numer telefonu":
                             formData.PUPContact.Phone = value;
                             break;
@@ -372,5 +423,47 @@ public class FileReader : IFileReader
         {
             return new Error("General Error", ex.Message);
         }
+    }
+    public List<string> ReadColumnFromExcel(string filePath, string sheetName, string firstCellName)
+    {
+        // Initialize a list to store column values
+        List<string> columnData = new List<string>();
+
+        try
+        {
+            // Open the Excel file
+            using (var workbook = new XLWorkbook(filePath))
+            {
+                // Get the specified worksheet
+                var worksheet = workbook.Worksheet(sheetName);
+
+                // Find the first cell with the specified name
+                var firstCell = worksheet.CellsUsed().Where(x => x.GetText().StartsWith(firstCellName)).FirstOrDefault();
+                var firstCell1 = worksheet.CellsUsed().Where(x => x.GetText().Any()).Select(x => x.Value).ToList();
+
+                if (firstCell == null)
+                {
+                    var firstCell2 = worksheet.CellsUsed().Where(x => x.GetText().Any()).Select(x => x.Value).ToList();
+                    var xds = 1;
+                    throw new Exception($"Cell with value '{firstCellName}' not found in sheet '{sheetName}'.");
+                }
+
+                // Get the column number of the first cell
+                int columnNumber = firstCell.Address.ColumnNumber;
+
+                // Iterate over all rows in the column starting from the first cell's row
+                foreach (var cell in worksheet.Column(columnNumber).CellsUsed())
+                {
+                    // Add the cell value to the list
+                    columnData.Add(cell.GetText());
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"An error occurred: {ex.Message}");
+        }
+
+        return columnData;
     }
 }
