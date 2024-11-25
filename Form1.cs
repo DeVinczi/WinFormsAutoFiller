@@ -36,7 +36,7 @@ namespace WinFormsAutoFiller
         public Form1()
         {
             InitializeComponent();
-            Text = "Uzupe³nianie formularza KFS";
+            Text = "UzupeÂ³nianie formularza KFS";
             Size = new Size(1400, 800);
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -57,7 +57,7 @@ namespace WinFormsAutoFiller
 
             Label titleLabel = new Label
             {
-                Text = "Uzupe³nianie formularza KFS",
+                Text = "UzupeÂ³nianie formularza KFS",
                 Font = new Font("Segoe UI", 18, FontStyle.Bold),
                 TextAlign = ContentAlignment.MiddleCenter,
                 Dock = DockStyle.Top,
@@ -66,7 +66,7 @@ namespace WinFormsAutoFiller
 
             Label descriptionLabel = new Label
             {
-                Text = "Po przyciœniêciu przycisku \"Za³aduj pliki do formularza KFS\" otworzy Ci siê Google Chrome.",
+                Text = "Po przyciÅ“niÃªciu przycisku \"ZaÂ³aduj pliki do formularza KFS\" otworzy Ci siÃª Google Chrome.",
                 Font = new Font("Segoe UI", 12),
                 TextAlign = ContentAlignment.MiddleCenter,
                 Dock = DockStyle.Top,
@@ -75,7 +75,7 @@ namespace WinFormsAutoFiller
 
             Label descriptionLabel2 = new Label
             {
-                Text = "Zaloguj siê do pracuj.gov.pl",
+                Text = "Zaloguj siÃª do pracuj.gov.pl",
                 Font = new Font("Segoe UI", 12),
                 TextAlign = ContentAlignment.MiddleCenter,
                 Dock = DockStyle.Top,
@@ -84,16 +84,16 @@ namespace WinFormsAutoFiller
 
             Label descriptionLabel3 = new Label
             {
-                Text = "Przejdz do formularza PSZ-KFS i poczekaj a¿ za³aduj¹ siê dane.",
+                Text = "Przejdz do formularza PSZ-KFS i poczekaj aÂ¿ zaÂ³adujÂ¹ siÃª dane.",
                 Font = new Font("Segoe UI", 12),
                 TextAlign = ContentAlignment.MiddleCenter,
                 Dock = DockStyle.Top,
                 Height = 40
             };
 
-            Button file1Button = CreateFileButton("Wybierz plik Excel z danymi ogólnymi", 1);
-            Button file2Button = CreateFileButton("Wybierz plik Excel z wycen¹", 2);
-            Button file3Button = CreateFileButton2("Za³¹czniki", 3);  // Third file button
+            Button file1Button = CreateFileButton("Wybierz plik Excel z danymi ogÃ³lnymi", 1);
+            Button file2Button = CreateFileButton("Wybierz plik Excel z wycenÂ¹", 2);
+            Button file3Button = CreateFileButton2("ZaÂ³Â¹czniki", 3);  // Third file button
 
             Label file1Label = CreateFileLabel(1);
             Label file2Label = CreateFileLabel(2);
@@ -101,7 +101,7 @@ namespace WinFormsAutoFiller
 
             Button uploadButton = new Button
             {
-                Text = "Za³aduj pliki do formularza KFS",
+                Text = "ZaÂ³aduj pliki do formularza KFS",
                 Dock = DockStyle.Bottom,
                 Height = 50,
                 Font = new Font("Segoe UI", 14),
@@ -365,20 +365,20 @@ namespace WinFormsAutoFiller
             var hours = reader.FindWordInWordDocument(program).Value;
             if (!int.TryParse(hours, out var hoursParsed))
             {
-                MessageBox.Show("Czas trwania kursu jest nieprawid³owy.", "B³¹d", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Czas trwania kursu jest nieprawidÂ³owy.", "BÂ³Â¹d", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
             var result = reader.FindObjectInExcelDocument(file1Path);
             if (!string.IsNullOrEmpty(result?.Error?.Code))
             {
-                MessageBox.Show(result.Error.Message, "B³¹d", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(result.Error.Message, "BÂ³Â¹d", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
             if (string.IsNullOrEmpty(file1Path) || string.IsNullOrEmpty(file2Path))
             {
-                MessageBox.Show("Prosze za³aduj dwa pliki Excel.", "B³¹d", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Prosze zaÂ³aduj dwa pliki Excel.", "BÂ³Â¹d", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
@@ -394,7 +394,7 @@ namespace WinFormsAutoFiller
                 var aypkrsfile = await httpClientService.PostKrsAsync($"https://prs-openapi2-prs-prod.apps.ocp.prod.ms.gov.pl/api/wyszukiwarka/OdpisPelny/pdf", aypkrs, "0000741233");
                 var siedziba = new Adres();
 
-                if (OperationHelpers.ValidateKRS(result.Value.KRS))
+                if (string.IsNullOrEmpty(result.Value.KRS) && int.TryParse(result.Value.KRS, out var parsedInt1))
                 {
                     var krs = AESBruteForceDecryption.Encrypt(result.Value.KRS);
                     pathToPdfKrs = await httpClientService.PostKrsAsync($"https://prs-openapi2-prs-prod.apps.ocp.prod.ms.gov.pl/api/wyszukiwarka/OdpisPelny/pdf", krs, result.Value.KRS);
@@ -413,15 +413,15 @@ namespace WinFormsAutoFiller
                     (file1Path, file2Path, result.Value.AdditionalBusinessAddresses, city, pkd, nrRachunku, result.Value.EmploymentData.ContractEmployees, result.Value.PUPContact, selectedFiles, pathToPdfKrs, pathToPdfNip, ris, aypkrsfile, siedziba, uzasadnienie);
                 if (!string.IsNullOrEmpty(isProcessed?.Error?.Code))
                 {
-                    MessageBox.Show($"Wyst¹pi³ b³¹d: {isProcessed.Error.Message}", "B³¹d", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show($"WystÂ¹piÂ³ bÂ³Â¹d: {isProcessed.Error.Message}", "BÂ³Â¹d", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
 
-                MessageBox.Show("Pliki zosta³y dodane pomyœlnie do formularza.", "Sukces", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Pliki zostaÂ³y dodane pomyÅ“lnie do formularza.", "Sukces", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Wyst¹pi³ b³¹d: {ex.Message}", "B³¹d", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"WystÂ¹piÂ³ bÂ³Â¹d: {ex.Message}", "BÂ³Â¹d", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
 
             ((Label)Controls[1]).Text = GUIMessage.BrakWybranegoPliku;
@@ -440,8 +440,8 @@ namespace WinFormsAutoFiller
                 UpdateProgress(10);
                 seleniumService.LoginToPage();
 
-                List<string> tematySzkoleñ = [];
-                var listaSzkoleñ = await fileReader.ReadExcelFileAsync(filePath2, TrainingFormPatterns.Patterns, "lista szkoleñ");
+                List<string> tematySzkoleÃ± = [];
+                var listaSzkoleÃ± = await fileReader.ReadExcelFileAsync(filePath2, TrainingFormPatterns.Patterns, "lista szkoleÃ±");
                 List<string> models = [];
                 var dataExcelCities = await fileReader.GetExcelWorksheetNames(filePath1);
 
@@ -455,7 +455,7 @@ namespace WinFormsAutoFiller
                     .Select(z => new { Item = z, Name = RegexHelpers.GetNameFromExcel(z) }).ToList();
 
                 var start = dataWithExcelWorksheets.OrderBy(x => x.StartDate).First().StartDate;
-                string regexPattern = @"[A-Z¥ÆÊ£ÑÓŒ¯a-z¹æê³ñóœŸ¿]+(?:[_\s\.])?\d{4}(?:[_\s\.])?\d{2}(?:[_\s\.])?\d{2}"; // Regex to match CITY_YYYY.MM.DD
+                string regexPattern = @"[A-ZÂ¥Ã†ÃŠÂ£Ã‘Ã“Å’ÂÂ¯a-zÂ¹Ã¦ÃªÂ³Ã±Ã³Å“Å¸Â¿]+(?:[_\s\.])?\d{4}(?:[_\s\.])?\d{2}(?:[_\s\.])?\d{2}"; // Regex to match CITY_YYYY.MM.DD
                 string matchedFromFile = RegexHelpers.ExtractMatch(file1Path, regexPattern);
                 var worksheetMatch = string.Empty;
                 if (matchedFromFile != null)
@@ -474,7 +474,7 @@ namespace WinFormsAutoFiller
                 }
                 var getName = RegexHelpers.GetName(filePath1);
                 var dataTables = await fileReader.ReadExcelFileAsync(filePath1, WorkerFormPatterns.Patterns, worksheetMatch);
-                var dataTableAdditionalAllWorkers = await fileReader.ReadExcelFileAsync(filePath1, WorkerFormPatterns.Patterns, "Dane ogólne");
+                var dataTableAdditionalAllWorkers = await fileReader.ReadExcelFileAsync(filePath1, WorkerFormPatterns.Patterns, "Dane ogÃ³lne");
                 var dataTablesCombinded = Clone(dataTables, dataTableAdditionalAllWorkers);
                 await seleniumService.LoadForm(businessAddresses, city, pkd, nrRachunku, liczbaZatrudnionych, contactPerson, start, start, paths, krs, ceidg, ris, aypNip, siedziba);
 
@@ -482,7 +482,7 @@ namespace WinFormsAutoFiller
 
                 IFileWriter fileWriter = new FormFiller.Services.FileWriter();
 
-                var pracownicyTable = await fileReader.ReadExcelFileAsync(filePath2, null, "lista osób");
+                var pracownicyTable = await fileReader.ReadExcelFileAsync(filePath2, null, "lista osÃ³b");
 
                 //var tmp = await fileWriter.ExcelWriterAsyncReversed(dataTables, filePath1);
 
@@ -574,7 +574,7 @@ namespace WinFormsAutoFiller
 
                     seleniumService.LoadPlanowanyRealizator();
 
-                    seleniumService.LoadInfomacjeDotyczaceKsztalcenia(tmp2.Item2, listaSzkoleñ, pracownicyTable, uzasadnienie);
+                    seleniumService.LoadInfomacjeDotyczaceKsztalcenia(tmp2.Item2, listaSzkoleÃ±, pracownicyTable, uzasadnienie);
 
                     UpdateProgress(90);
 
@@ -622,23 +622,23 @@ namespace WinFormsAutoFiller
 
         private DataTable Clone(DataTable dataTables, DataTable dataTableAdditionalAllWorkers)
         {
-            var mergedDataTable = dataTables.Clone(); // Skopiuj strukturê tabeli.
+            var mergedDataTable = dataTables.Clone(); // Skopiuj strukturÃª tabeli.
 
             foreach (DataRow row in dataTables.Rows)
             {
-                // Pobierz wartoœæ z kolumny NazwiskoImie.
+                // Pobierz wartoÅ“Ã¦ z kolumny NazwiskoImie.
                 var nazwiskoImie = row[WorkersFormKeys.NazwiskoImie]?.ToString();
 
                 if (!string.IsNullOrEmpty(nazwiskoImie))
                 {
-                    // ZnajdŸ dopasowany wiersz w dodatkowej tabeli.
+                    // ZnajdÅ¸ dopasowany wiersz w dodatkowej tabeli.
                     var matchingRow = dataTableAdditionalAllWorkers
                         .AsEnumerable()
                         .FirstOrDefault(r => r[WorkersFormKeys.NazwiskoImie]?.ToString() == nazwiskoImie);
 
                     if (matchingRow != null)
                     {
-                        // Dodaj now¹ kolumnê do mergedDataTable, jeœli nie istnieje.
+                        // Dodaj nowÂ¹ kolumnÃª do mergedDataTable, jeÅ“li nie istnieje.
                         if (!mergedDataTable.Columns.Contains(WorkersFormKeys.KwotaOtrzymanegoDofinansowania))
                         {
                             mergedDataTable.Columns.Add(WorkersFormKeys.KwotaOtrzymanegoDofinansowania, typeof(string));
@@ -648,7 +648,7 @@ namespace WinFormsAutoFiller
                         var newRow = mergedDataTable.NewRow();
                         newRow.ItemArray = row.ItemArray;
 
-                        // Dodaj wartoœæ KwotaOtrzymanegoDofinansowania.
+                        // Dodaj wartoÅ“Ã¦ KwotaOtrzymanegoDofinansowania.
                         newRow[WorkersFormKeys.KwotaOtrzymanegoDofinansowania] =
                             matchingRow[WorkersFormKeys.KwotaOtrzymanegoDofinansowania];
 
