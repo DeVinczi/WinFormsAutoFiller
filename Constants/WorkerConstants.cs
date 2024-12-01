@@ -59,7 +59,7 @@ public static class WorkerFormPatterns
 {
     public static readonly Dictionary<string, Regex> Patterns = new Dictionary<string, Regex>
     {
-        { WorkersFormKeys.Number, new Regex(@"^.*$")},
+        { WorkersFormKeys.Number, new Regex(@"^.*$")}, //pierwsza kolumna
         { WorkersFormKeys.NazwiskoImie, new Regex(@"^(?:[Nn]azwisko\s*i\s*[Ii]mi[ęe]|[Ii]mi[ęe]\s*i\s*[Nn]azwisko)$", RegexOptions.Compiled|RegexOptions.IgnoreCase) },
         { WorkersFormKeys.Miasto, new Regex(@"^[Mm]iasto$", RegexOptions.Compiled|RegexOptions.IgnoreCase) },
         { WorkersFormKeys.Pesel, new Regex(@"^PESEL$", RegexOptions.Compiled|RegexOptions.IgnoreCase) },
@@ -79,7 +79,7 @@ public static class WorkerFormPatterns
         { WorkersFormKeys.Etat, new Regex(@"^ETAT$", RegexOptions.Compiled|RegexOptions.IgnoreCase) },
         { WorkersFormKeys.OkresZatrudnieniaOd, new Regex(@"^OKRES\s*ZATR\.?\s*OD$", RegexOptions.Compiled|RegexOptions.IgnoreCase) },
         { WorkersFormKeys.OkresZatrudnieniaDo, new Regex(@"^OKRES\s*ZATR\.?\s*DO$", RegexOptions.Compiled|RegexOptions.IgnoreCase) },
-        { WorkersFormKeys.KwotaOtrzymanegoDofinansowania, new Regex(@"(?i)\s*kwota\s+otrzymanego\s+dofinansowania\s*[\.,]?", RegexOptions.Compiled|RegexOptions.IgnoreCase) }
+        { WorkersFormKeys.KwotaOtrzymanegoDofinansowania, new Regex(@"(?i)\s*kwota\s+otrzymanego\s+dofinansowania\s*[\.,]?", RegexOptions.Compiled|RegexOptions.IgnoreCase) } // 
     };
 
     public class Worker
@@ -103,7 +103,7 @@ public static class WorkerFormPatterns
         public string Etat { get; set; }
         public string OkresZatrudnieniaOd { get; set; }
         public string OkresZatrudnieniaDo { get; set; }
-        
+
         public Worker(
             string number,
             string nazwiskoImie,
@@ -120,7 +120,7 @@ public static class WorkerFormPatterns
             string deficytGdansk,
             string deficytPomorskie,
             string poziomWyksztalcenia,
-            string formaZatrudnienia ,
+            string formaZatrudnienia,
             string etat,
             string okresZatrudnieniaOd,
             string okresZatrudnieniaDo)

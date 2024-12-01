@@ -1,5 +1,8 @@
+using AutoFiller.Models;
+
 using FormFiller.Constants;
 using FormFiller.Models.TrainingEntity;
+using FormFiller.Models.WorkerEntity;
 using FormFiller.Services;
 
 using FuzzySharp;
@@ -25,12 +28,14 @@ namespace WinFormsAutoFiller
         private string file1Path;
         private string file2Path;
         private ProgressBar progressBar;
-        private string[] selectedFiles;
+        private List<string> selectedFiles = [];
         private Dictionary<string, string> filePaths;
-        private Button openButton;
         private string city;
         private ComboBox comboBoxFiles;
+        private ComboBox workSheets;
         private Label labelUzasadnienia;
+        private Label labelZak≥adka;
+        private CheckBox czyJestMikro;
         string directoryPath = Path.Combine(Application.StartupPath, "Uzasadnienia");
 
         public Form1()
@@ -39,8 +44,9 @@ namespace WinFormsAutoFiller
             Text = "Uzupe≥nianie formularza KFS";
             Size = new Size(1400, 800);
             StartPosition = FormStartPosition.CenterScreen;
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
+            FormBorderStyle = FormBorderStyle.Sizable;
+            MaximizeBox = true;
+            AutoScaleMode = AutoScaleMode.Dpi;
 
             labelUzasadnienia = new Label();
             labelUzasadnienia.Text = "Uzasadnienia";
@@ -51,6 +57,15 @@ namespace WinFormsAutoFiller
             comboBoxFiles = new ComboBox();
             comboBoxFiles.Location = new System.Drawing.Point(10, 400);  // Position the ComboBox below the label
             comboBoxFiles.Width = 380;  // Set width of the ComboBox
+
+            workSheets = new ComboBox();
+            workSheets.Location = new Point(920, 230);
+            workSheets.Width = 300;
+            labelZak≥adka = new Label();
+            labelZak≥adka.Text = "Zak≥adki:";
+            labelZak≥adka.Font = new Font("Segoe UI", 11);// Set the text for the label
+            labelZak≥adka.Location = new System.Drawing.Point(920, 200); // Position the label
+            labelZak≥adka.Width = 300;
 
             // Load files into the ComboBox
             LoadFiles();
@@ -119,6 +134,25 @@ namespace WinFormsAutoFiller
                 Step = 1
             };
 
+            czyJestMikro = new CheckBox
+            {
+                Text = "Czy jest mikroprzedsiÍbiorcπ?",
+                AutoSize = true, // Automatically size the checkbox to fit the text
+                Font = new Font("Segoe UI", 9), // Stylish font
+                Location = new Point(940, 320),
+                FlatStyle = FlatStyle.Flat, // Flat style for a modern look
+                CheckAlign = ContentAlignment.MiddleLeft, // Align checkbox to the right of text
+                TextAlign = ContentAlignment.MiddleRight, // Align text to the left
+                Checked = true
+            };
+
+            czyJestMikro.Click += (sender, e) =>
+            {
+                czyJestMikro.Checked = !czyJestMikro.Checked;
+            };
+
+            czyJestMikro.FlatAppearance.BorderColor = Color.FromArgb(0, 120, 212);
+            czyJestMikro.FlatAppearance.BorderSize = 1;
 
             uploadButton.FlatAppearance.BorderSize = 0;
             uploadButton.Click += UploadButton_Click;
@@ -138,36 +172,19 @@ namespace WinFormsAutoFiller
             Controls.Add(progressBar);
             Controls.Add(labelUzasadnienia);
             Controls.Add(comboBoxFiles);
+            Controls.Add(workSheets);
+            Controls.Add(labelZak≥adka);
+            Controls.Add(czyJestMikro);
 
             // Set background color
             BackColor = Color.FromArgb(240, 240, 240);
             file3Button.AllowDrop = true;
             file3Button.DragEnter += File3Button_DragEnter;
             file3Button.DragDrop += File3Button_DragDrop;
-        }
-        private void LoadFiles()
-        {
-            // Define the path to the "Uzasadnienia" folder
-            string directoryPath = Path.Combine(Application.StartupPath, "Uzasadnienia");
 
-            // Check if the directory exists
-            if (Directory.Exists(directoryPath))
-            {
-                // Get all the files in the directory
-                string[] files = Directory.GetFiles(directoryPath);
-
-                // Add file names to the ComboBox
-                foreach (string file in files)
-                {
-                    // Add only the file name, not the full path
-                    comboBoxFiles.Items.Add(Path.GetFileName(file));
-                }
-            }
-            else
-            {
-                MessageBox.Show("The 'Uzasadnienia' directory does not exist.");
-            }
+            czyJestMikro.AutoCheck = false;
         }
+
         private Button CreateFileButton(string text, int fileNumber)
         {
             Button button = new Button
@@ -181,6 +198,9 @@ namespace WinFormsAutoFiller
             };
             button.FlatAppearance.BorderColor = Color.FromArgb(0, 120, 212);
             button.Click += (sender, e) => FileButton_Click(fileNumber);
+            button.AllowDrop = true;
+            button.DragEnter += (sender, e) => Button_DragEnter(sender, e, fileNumber);
+            button.DragDrop += (sender, e) => Button_DragDrop(sender, e, fileNumber);
             return button;
         }
         private Button CreateFileButton2(string text, int fileNumber)
@@ -225,25 +245,91 @@ namespace WinFormsAutoFiller
                 AutoSize = false,
             };
 
-            // Create a ToolTip for the label
             ToolTip toolTip = new ToolTip
             {
-                ToolTipIcon = ToolTipIcon.Info, // You can choose other icons
-                ToolTipTitle = "Pliki wybrane"  // Title for the tooltip
+                ToolTipIcon = ToolTipIcon.Info,
+                ToolTipTitle = "Pliki wybrane"
             };
 
             label.MouseHover += (sender, e) =>
             {
-                // Check if the label's text exceeds its bounds
-                if (label.Text.Length > 100) // Adjust this threshold as needed
+                if (label.Text.Length > 100)
                 {
-                    // Show the tooltip with the full text
                     toolTip.SetToolTip(label, label.Text);
                 }
             };
 
             return label;
         }
+
+        private void Button_DragEnter(object sender, DragEventArgs e, int fileNumber)
+        {
+            // Check if the dragged data contains file paths and is an Excel file
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+
+                // Check if the file is an Excel file (.xls or .xlsx)
+                if (files.Length == 1 && IsExcelFile(files[0]))
+                {
+                    e.Effect = DragDropEffects.Copy;  // Show the copy cursor
+                }
+                else
+                {
+                    e.Effect = DragDropEffects.None;  // Show no effect if it's not an Excel file
+                }
+            }
+            else
+            {
+                e.Effect = DragDropEffects.None;  // Show no effect if it's not a file
+            }
+        }
+
+        private bool IsExcelFile(string filePath)
+        {
+            string[] allowedExtensions = { ".xlsx", ".xls", ".xlsm", ".xlsb", ".xltx", ".xlw" };
+            return allowedExtensions.Contains(Path.GetExtension(filePath).ToLower());
+        }
+
+        private async void Button_DragDrop(object sender, DragEventArgs e, int fileNumber)
+        {
+            try
+            {
+                // Get the file paths from the dragged files
+                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+
+                // Only process the drop if it's a single file (Excel)
+                if (files.Length == 1 && IsExcelFile(files[0]))
+                {
+                    if (fileNumber == 1)
+                    {
+                        var fileReader = new FileReader();
+                        var getNames = await fileReader.GetExcelWorksheetNames(files[0]);
+                        if (getNames.Count == 0)
+                        {
+                            MessageBox.Show("Excel nie ma zak≥adek do pokazania", "B≥πd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            return;
+                        }
+                        foreach (var name in getNames)
+                        {
+                            workSheets.Items.Add(name);
+                        }
+                        file1Path = files[0];
+                        ((Label)Controls[3]).Text = Path.GetFileName(files[0]);
+                    }
+                    if (fileNumber == 2)
+                    {
+                        file2Path = files[0];
+                        ((Label)Controls[1]).Text = Path.GetFileName(files[0]);
+                    }
+                }
+            }
+            catch
+            {
+                throw;
+            }
+        }
+
         private void FileButton_Click_2(int fileNumber)
         {
             OpenFileDialog openFileDialog = new OpenFileDialog
@@ -255,14 +341,31 @@ namespace WinFormsAutoFiller
             // Show the dialog and process the selected files
             if (openFileDialog.ShowDialog() == DialogResult.OK)
             {
-                selectedFiles = openFileDialog.FileNames;  // Store selected files
+                selectedFiles = openFileDialog.FileNames.ToList();  // Store selected files
                 filePaths = AddFilePaths(openFileDialog.FileNames);
 
                 // Display the selected file names in the label
                 ((Label)Controls[9]).Text = string.Join(Environment.NewLine, selectedFiles.Select(file => Path.GetFileName(file)));
             }
         }
+        private void LoadFiles()
+        {
+            string directoryPath = Path.Combine(Application.StartupPath, "Uzasadnienia");
 
+            if (Directory.Exists(directoryPath))
+            {
+                string[] files = Directory.GetFiles(directoryPath);
+
+                foreach (string file in files)
+                {
+                    comboBoxFiles.Items.Add(Path.GetFileName(file));
+                }
+            }
+            else
+            {
+                MessageBox.Show("Folder 'Uzasadnienia' nie istnieje.");
+            }
+        }
         private Dictionary<string, string> AddFilePaths(string[] fileNames)
         {
             var dict = new Dictionary<string, string>();
@@ -286,14 +389,15 @@ namespace WinFormsAutoFiller
         {
             // Get the file paths from the dragged files
             string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
-            selectedFiles = files;  // Store the file paths
+            selectedFiles.AddRange(files);  // Store the file paths
 
+            filePaths = AddFilePaths(selectedFiles.ToArray());
             // Display the selected file names in the label
             var z = string.Join(Environment.NewLine, selectedFiles.Select(file => Path.GetFileName(file)));
             ((Label)Controls[9]).Text = z;
         }
 
-        private void FileButton_Click(int fileNumber)
+        private async void FileButton_Click(int fileNumber)
         {
             OpenFileDialog openFileDialog = new OpenFileDialog
             {
@@ -314,13 +418,23 @@ namespace WinFormsAutoFiller
                             MessageBox.Show(checkName.Error.Message, checkName.Error.Code, MessageBoxButtons.OK, MessageBoxIcon.Error);
                             return;
                         }
+                        var fileReader = new FileReader();
+                        var getNames = await fileReader.GetExcelWorksheetNames(filePath);
+                        if (getNames.Count == 0)
+                        {
+                            MessageBox.Show("Excel nie ma zak≥adek do pokazania", "B≥πd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            return;
+                        }
+                        foreach (var name in getNames)
+                        {
+                            workSheets.Items.Add(name);
+                        }
                         ((Label)Controls[3]).Text = Path.GetFileName(filePath);
                         file1Path = filePath;
                     }
                     catch
                     {
-                        ((Label)Controls[3]).Text = GUIMessage.BrakWybranegoPliku;
-                        file1Path = null;
+                        throw;
                     }
                 }
                 else
@@ -334,14 +448,11 @@ namespace WinFormsAutoFiller
                             return;
                         }
 
-                        city = cityAndDate.Value.City;
                         file2Path = filePath;
                         ((Label)Controls[1]).Text = Path.GetFileName(filePath);
                     }
                     catch
                     {
-                        ((Label)Controls[1]).Text = GUIMessage.BrakWybranegoPliku;
-                        file2Path = null;
                     }
                 }
             }
@@ -349,92 +460,117 @@ namespace WinFormsAutoFiller
 
         private async void UploadButton_Click(object sender, EventArgs e)
         {
-            var path = Path.Combine(Path.GetTempPath() + "ayp");
-            if (Directory.Exists(path))
-            {
-                var files = Directory.GetFiles(path);
-
-                foreach (var file in files)
-                {
-                    File.Delete(file);
-                }
-            }
-
-            var program = RegexHelpers.GetProgram([.. filePaths.Values]);
-            var reader = new FileReader();
-            var hours = reader.FindWordInWordDocument(program).Value;
-            if (!int.TryParse(hours, out var hoursParsed))
-            {
-                MessageBox.Show("Czas trwania kursu jest nieprawid≥owy.", "B≥πd", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-
-            var result = reader.FindObjectInExcelDocument(file1Path);
-            if (!string.IsNullOrEmpty(result?.Error?.Code))
-            {
-                MessageBox.Show(result.Error.Message, "B≥πd", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-
-            if (string.IsNullOrEmpty(file1Path) || string.IsNullOrEmpty(file2Path))
-            {
-                MessageBox.Show("Prosze za≥aduj dwa pliki Excel.", "B≥πd", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-
             try
             {
-                var httpClientService = new HttpClientService();
-                ISeleniumService seleniumService = new SeleniumService();
-                string pathToPdfKrs = string.Empty;
-                string pathToPdfNip = string.Empty;
-
-                var ris = seleniumService.DownloadAypRis();
-                var aypkrs = AESBruteForceDecryption.Encrypt("0000741233");
-                var aypkrsfile = await httpClientService.PostKrsAsync($"https://prs-openapi2-prs-prod.apps.ocp.prod.ms.gov.pl/api/wyszukiwarka/OdpisPelny/pdf", aypkrs, "0000741233");
-                var siedziba = new Adres();
-
-                if (OperationHelpers.ValidateKRS(result.Value.KRS))
+                if (string.IsNullOrEmpty(workSheets.SelectedItem.ToString()))
                 {
-                    var krs = AESBruteForceDecryption.Encrypt(result.Value.KRS);
-                    pathToPdfKrs = await httpClientService.PostKrsAsync($"https://prs-openapi2-prs-prod.apps.ocp.prod.ms.gov.pl/api/wyszukiwarka/OdpisPelny/pdf", krs, result.Value.KRS);
-                    var s = await httpClientService.GetAsync($"https://api-krs.ms.gov.pl/api/krs/odpisaktualny/{result.Value.KRS}?rejestr=P");
-                    siedziba = s.Odpis.Dane.Dzial1.SiedzibaIAdres.Adres;
-                }
-                else
-                {
-                    pathToPdfNip = await seleniumService.DownloadComapnyByNipPdf(result.Value.NIP);
-                }
-
-                var pkd = Regex.Match(result.Value.PKD.Replace(".", ""), @"\d+[A-Z]").Value;
-                var nrRachunku = Regex.Replace(result.Value.BankAccountDetails.AccountNumber, @"[^\d\s]", "").Trim();
-                var uzasadnienie = Path.Combine(directoryPath, comboBoxFiles.SelectedItem.ToString());
-                var isProcessed = await ProcessExcelFiles
-                    (file1Path, file2Path, result.Value.AdditionalBusinessAddresses, city, pkd, nrRachunku, result.Value.EmploymentData.ContractEmployees, result.Value.PUPContact, selectedFiles, pathToPdfKrs, pathToPdfNip, ris, aypkrsfile, siedziba, uzasadnienie);
-                if (!string.IsNullOrEmpty(isProcessed?.Error?.Code))
-                {
-                    MessageBox.Show($"Wystπpi≥ b≥πd: {isProcessed.Error.Message}", "B≥πd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show("Nie wybra≥eú zak≥adki", "B≥πd", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
 
-                MessageBox.Show("Pliki zosta≥y dodane pomyúlnie do formularza.", "Sukces", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                if (string.IsNullOrEmpty(comboBoxFiles.SelectedItem.ToString()))
+                {
+                    MessageBox.Show("Nie wybra≥eú uzasadnienia", "B≥πd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+                city = RegexHelpers.GetNameFromExcel(workSheets.SelectedItem.ToString()).City;
+                var path = Path.Combine(Path.GetTempPath() + "ayp");
+                if (Directory.Exists(path))
+                {
+                    var files = Directory.GetFiles(path);
+
+                    foreach (var file in files)
+                    {
+                        File.Delete(file);
+                    }
+                }
+
+                var reader = new FileReader();
+                var wordReader = new DocumentReader();
+
+                var result = reader.FindObjectInExcelDocument(file1Path);
+                if (!string.IsNullOrEmpty(result?.Error?.Code))
+                {
+                    MessageBox.Show(result.Error.Message, "B≥πd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(file1Path) || string.IsNullOrEmpty(file2Path))
+                {
+                    MessageBox.Show("Prosze za≥aduj dwa pliki Excel.", "B≥πd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                try
+                {
+                    var httpClientService = new HttpClientService();
+                    ISeleniumService seleniumService = new SeleniumService();
+                    string pathToPdfKrs = string.Empty;
+                    string pathToPdfNip = string.Empty;
+
+                    var ris = seleniumService.DownloadAypRis();
+                    var aypkrs = AESBruteForceDecryption.Encrypt("0000741233");
+                    var aypkrsfile = await httpClientService.PostKrsAsync($"https://prs-openapi2-prs-prod.apps.ocp.prod.ms.gov.pl/api/wyszukiwarka/OdpisPelny/pdf", aypkrs, "0000741233");
+                    var siedziba = new Adres();
+
+                    if (!string.IsNullOrEmpty(result.Value.KRS) && result.Value.KRS.Any(char.IsDigit))
+                    {
+                        var krs = AESBruteForceDecryption.Encrypt(result.Value.KRS);
+                        pathToPdfKrs = await httpClientService.PostKrsAsync($"https://prs-openapi2-prs-prod.apps.ocp.prod.ms.gov.pl/api/wyszukiwarka/OdpisPelny/pdf", krs, result.Value.KRS);
+                        var s = await httpClientService.GetAsync($"https://api-krs.ms.gov.pl/api/krs/odpisaktualny/{result.Value.KRS}?rejestr=P");
+                        siedziba = s.Odpis.Dane.Dzial1.SiedzibaIAdres.Adres;
+                    }
+                    else
+                    {
+                        pathToPdfNip = await seleniumService.DownloadComapnyByNipPdf(result.Value.NIP);
+                    }
+
+                    var pkd = Regex.Match(result.Value.PKD.Replace(".", ""), @"\d+[A-Z]").Value;
+                    var nrRachunku = Regex.Replace(result.Value.BankAccountDetails.AccountNumber, @"[^\d\s]", "").Trim();
+                    var uzasadnienie = Path.Combine(directoryPath, comboBoxFiles.SelectedItem.ToString());
+                    var krsValue = result.Value.KRS ?? string.Empty;
+                    var isProcessed = await ProcessExcelFiles
+                        (file1Path, file2Path, result.Value.AdditionalBusinessAddresses, city, pkd, nrRachunku, result.Value.EmploymentData.ContractEmployees, result.Value.PUPContact, selectedFiles.ToArray(), pathToPdfKrs, pathToPdfNip, ris, aypkrsfile, siedziba, uzasadnienie, workSheets.SelectedItem.ToString(), krsValue);
+                    if (!string.IsNullOrEmpty(isProcessed?.Error?.Code))
+                    {
+                        MessageBox.Show($"Wystπpi≥ b≥πd: {isProcessed.Error.Message}", "B≥πd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+
+                    MessageBox.Show("Pliki zosta≥y dodane pomyúlnie do formularza.", "Sukces", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Wystπpi≥ b≥πd: {ex.Message}", "B≥πd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+
+                file1Path = null;
+                file2Path = null;
+                filePaths = null;
+
+                comboBoxFiles.SelectedIndex = -1;
+                workSheets.SelectedIndex = -1;
+                workSheets.Items.Clear();
+                ((Label)Controls[1]).Text = GUIMessage.BrakWybranegoPliku;
+                ((Label)Controls[3]).Text = GUIMessage.BrakWybranegoPliku;
+                ((Label)Controls[9]).Text = GUIMessage.BrakWybranegoPliku;
+                progressBar.Value = 0;
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Wystπpi≥ b≥πd: {ex.Message}", "B≥πd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(ex.Message, "B≥πd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                throw;
             }
-
-            ((Label)Controls[1]).Text = GUIMessage.BrakWybranegoPliku;
-            ((Label)Controls[3]).Text = GUIMessage.BrakWybranegoPliku;
-            progressBar.Value = 0;
         }
 
         private async Task<Result<bool, Error>> ProcessExcelFiles(
-            string filePath1, string filePath2, string businessAddresses, string city, string pkd, string nrRachunku, int liczbaZatrudnionych, ContactPerson contactPerson, string[] paths, string krs, string ceidg, string ris, string aypNip, Adres siedziba, string uzasadnienie)
+            string filePath1, string filePath2, string businessAddresses, string city, string pkd, string nrRachunku, int liczbaZatrudnionych,
+            ContactPerson contactPerson, string[] paths, string krs, string ceidg, string ris, string aypNip, Adres siedziba, string uzasadnienie, string nazwaZak≥adki, string krsValue)
         {
             try
             {
                 var fileReader = new FileReader();
+                var wordReader = new DocumentReader();
                 ISeleniumService seleniumService = new SeleniumService();
 
                 UpdateProgress(10);
@@ -444,55 +580,55 @@ namespace WinFormsAutoFiller
                 var listaSzkoleÒ = await fileReader.ReadExcelFileAsync(filePath2, TrainingFormPatterns.Patterns, "lista szkoleÒ");
                 List<string> models = [];
                 var dataExcelCities = await fileReader.GetExcelWorksheetNames(filePath1);
-
-                var dataWithExcelWorksheets = dataExcelCities
-                    .Select(x => new { Item = x, Name = RegexHelpers.GetNameFromExcel(x) })
-                    .Where(result => result.Name != null)
-                    .Select(result => result.Name)
-                    .ToList();
-                dataWithExcelWorksheets.Add(new Models.RegexEntity.CityAndDateModel { City = "Kolonia Karna", StartDate = DateTime.UtcNow });
-                var SataWithExcelWorksheets = dataExcelCities
-                    .Select(z => new { Item = z, Name = RegexHelpers.GetNameFromExcel(z) }).ToList();
-
-                var start = dataWithExcelWorksheets.OrderBy(x => x.StartDate).First().StartDate;
-                string regexPattern = @"[A-Z•∆ £—”åèØa-zπÊÍ≥ÒÛúüø]+(?:[_\s\.])?\d{4}(?:[_\s\.])?\d{2}(?:[_\s\.])?\d{2}"; // Regex to match CITY_YYYY.MM.DD
-                string matchedFromFile = RegexHelpers.ExtractMatch(file1Path, regexPattern);
-                var worksheetMatch = string.Empty;
-                if (matchedFromFile != null)
+                var programs = RegexHelpers.GetProgram([.. filePaths.Values]);
+                var hoursDict = new Dictionary<string, string>();
+                foreach (var program in programs)
                 {
-                    Console.WriteLine($"Found in file path: {matchedFromFile}");
+                    var hours = await wordReader.FindWordInWordDocumentAsync(program.Key);
+                    if (!string.IsNullOrEmpty(hours?.Error?.Message))
+                    {
+                        throw new Exception(hours.Error.Message);
+                    }
 
-                    worksheetMatch = RegexHelpers.FindMatchInWorksheets(matchedFromFile, SataWithExcelWorksheets.Select(x => x.Item).ToList());
+                    if (!int.TryParse(hours.Value, out var hoursParsed))
+                    {
+                        MessageBox.Show("Czas trwania kursu jest nieprawid≥owy.", "B≥πd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        throw new Exception("Czas trwania kursu jest nieprawid≥owy.");
+                    }
 
-                    Console.WriteLine(worksheetMatch != null
-                        ? $"Match found in worksheets: {worksheetMatch}"
-                        : "No match found in worksheets.");
+                    hoursDict.Add(program.Key, hours.Value);
                 }
-                else
-                {
-                    Console.WriteLine("No matching pattern found in file path.");
-                }
+
                 var getName = RegexHelpers.GetName(filePath1);
-                var dataTables = await fileReader.ReadExcelFileAsync(filePath1, WorkerFormPatterns.Patterns, worksheetMatch);
+                var dataTables = await fileReader.ReadExcelFileAsync(filePath1, WorkerFormPatterns.Patterns, nazwaZak≥adki);
                 var dataTableAdditionalAllWorkers = await fileReader.ReadExcelFileAsync(filePath1, WorkerFormPatterns.Patterns, "Dane ogÛlne");
-                var dataTablesCombinded = Clone(dataTables, dataTableAdditionalAllWorkers);
-                await seleniumService.LoadForm(businessAddresses, city, pkd, nrRachunku, liczbaZatrudnionych, contactPerson, start, start, paths, krs, ceidg, ris, aypNip, siedziba);
+                List<DateTime> list = [];
+                for (int i = 1; i < listaSzkoleÒ.Rows.Count; i++)
+                {
+                    var x = listaSzkoleÒ.Rows[i][TrainingFormKeys.TematSzkolenia].ToString();
+                    var s = ColumnHelpers.ReadWorksheetToDataTable(filePath1, nazwaZak≥adki);
+                    var columnData = ColumnHelpers.FetchColumnData(s, x);
+                    foreach (var col in columnData)
+                    {
+                        var (rangeCount, dates) = RegexHelpers.ExtractDatesWithRangeInfo(col);
+                        list.AddRange(dates);
+                    }
+                }
+                var start = list.OrderBy(x => x.Date).First();
+                var end = list.OrderByDescending(x => x.Date).First();
+                var dataTablesCombinded = FileReader.Clone(dataTables, dataTableAdditionalAllWorkers);
+
+                var columnWithPulaKFS = ColumnHelpers.FetchColumnData(dataTables, "Priorytet");
+                var ishigherThan10 = columnWithPulaKFS.Select(KFSPriority.MapPriority).Select(x => int.Parse(x.TrimEnd('\\'))).ToList();
+                var ishigher = ishigherThan10.Any(number => number <= 9);
+
+                await seleniumService.LoadForm(businessAddresses, city, pkd, nrRachunku, liczbaZatrudnionych, contactPerson, start, end, paths, krs, ceidg, ris, aypNip, siedziba, krsValue, ishigher, czyJestMikro.Checked);
 
                 UpdateProgress(20);
 
                 IFileWriter fileWriter = new FormFiller.Services.FileWriter();
 
                 var pracownicyTable = await fileReader.ReadExcelFileAsync(filePath2, null, "lista osÛb");
-
-                //var tmp = await fileWriter.ExcelWriterAsyncReversed(dataTables, filePath1);
-
-                //for (var i = tmp.Item2.Rows.Count(); i > 1; i--)
-                //{
-                //    var row = fileReader.ReadExcelRow(tmp.Item1);
-                //    seleniumService.ProvideWorkerInformation(row, city);
-                //    await fileWriter.DeleteExcelRowAsync(tmp.Item1, i);
-                //    UpdateProgress(30 + (int)((tmp.Item2.Rows.Count() - i) / (float)tmp.Item2.Rows.Count() * 20));
-                //}
 
                 var workersData = new List<WorkerData>();
 
@@ -574,10 +710,10 @@ namespace WinFormsAutoFiller
 
                     seleniumService.LoadPlanowanyRealizator();
 
-                    seleniumService.LoadInfomacjeDotyczaceKsztalcenia(tmp2.Item2, listaSzkoleÒ, pracownicyTable, uzasadnienie);
+                    seleniumService.LoadInfomacjeDotyczaceKsztalcenia(tmp2.Item2, listaSzkoleÒ, pracownicyTable, uzasadnienie, hoursDict);
 
                     UpdateProgress(90);
-
+                    await Task.Delay(1000);
                     seleniumService.ValidateWorkers();
 
                     //var worksheetNames = await fileReader.GetExcelWorksheetNames(filePath1);
@@ -597,10 +733,9 @@ namespace WinFormsAutoFiller
                     return true;
                 }
             }
-            catch (Exception ex)
+            catch
             {
-                Console.WriteLine(ex);
-                return Errors.ChromeProccessingError;
+                throw;
             }
         }
         List<string> FindMatchingWorkers(List<WorkerData> workersData, List<string> externalNames)
@@ -620,50 +755,13 @@ namespace WinFormsAutoFiller
             }
         }
 
-        private DataTable Clone(DataTable dataTables, DataTable dataTableAdditionalAllWorkers)
+        private static void GetErrorsHandled(Error error)
         {
-            var mergedDataTable = dataTables.Clone(); // Skopiuj strukturÍ tabeli.
-
-            foreach (DataRow row in dataTables.Rows)
+            if (!string.IsNullOrEmpty(error.Code))
             {
-                // Pobierz wartoúÊ z kolumny NazwiskoImie.
-                var nazwiskoImie = row[WorkersFormKeys.NazwiskoImie]?.ToString();
-
-                if (!string.IsNullOrEmpty(nazwiskoImie))
-                {
-                    // Znajdü dopasowany wiersz w dodatkowej tabeli.
-                    var matchingRow = dataTableAdditionalAllWorkers
-                        .AsEnumerable()
-                        .FirstOrDefault(r => r[WorkersFormKeys.NazwiskoImie]?.ToString() == nazwiskoImie);
-
-                    if (matchingRow != null)
-                    {
-                        // Dodaj nowπ kolumnÍ do mergedDataTable, jeúli nie istnieje.
-                        if (!mergedDataTable.Columns.Contains(WorkersFormKeys.KwotaOtrzymanegoDofinansowania))
-                        {
-                            mergedDataTable.Columns.Add(WorkersFormKeys.KwotaOtrzymanegoDofinansowania, typeof(string));
-                        }
-
-                        // Skopiuj oryginalny wiersz do nowej tabeli.
-                        var newRow = mergedDataTable.NewRow();
-                        newRow.ItemArray = row.ItemArray;
-
-                        // Dodaj wartoúÊ KwotaOtrzymanegoDofinansowania.
-                        newRow[WorkersFormKeys.KwotaOtrzymanegoDofinansowania] =
-                            matchingRow[WorkersFormKeys.KwotaOtrzymanegoDofinansowania];
-
-                        mergedDataTable.Rows.Add(newRow);
-                    }
-                }
+                MessageBox.Show(error.Message, "B≥πd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
             }
-            return mergedDataTable;
-
         }
-    }
-
-    public class WorkerData
-    {
-        public string Name { get; set; } = string.Empty;
-        public Dictionary<string, bool> ColumnData { get; set; } = new();
     }
 }

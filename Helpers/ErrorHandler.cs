@@ -7,7 +7,7 @@ public static class ErrorHandler
     /// </summary>
     /// <param name="action">The action to execute.</param>
     /// <param name="onError">Optional: A callback to handle the exception.</param>
-    public static void CatchError(Action action, Action<Exception>? onError = null)
+    public static void CatchError(Action action, Action<Exception> onError = null)
     {
         try
         {
@@ -28,7 +28,7 @@ public static class ErrorHandler
     /// <param name="onError">Optional: A callback to handle the exception.</param>
     /// <param name="defaultValue">The default value to return in case of an exception.</param>
     /// <returns>The result of the function or the default value if an exception occurs.</returns>
-    public static T CatchError<T>(Func<T> func, Action<Exception>? onError = null, T defaultValue = default)
+    public static T CatchError<T>(Func<T> func, Action<Exception> onError = null, T defaultValue = default)
     {
         try
         {

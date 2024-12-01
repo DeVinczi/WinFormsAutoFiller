@@ -1,4 +1,5 @@
-﻿namespace FormFiller.Models.WorkerEntity;
+﻿
+namespace FormFiller.Models.WorkerEntity;
 
 public static class Age
 {
@@ -28,7 +29,7 @@ public static class Age
         {
             return A45Plus;
         }
-        
+
         return A15B24;
     }
 }

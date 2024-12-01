@@ -4,7 +4,7 @@ namespace WinFormsAutoFiller.Models
 {
     public class Address
     {
-        public string Code { get; set; }
+        public string PostalCode { get; set; }
         public string City { get; set; }
         public string Street { get; set; }
         public string HouseNumber { get; set; }
@@ -13,38 +13,46 @@ namespace WinFormsAutoFiller.Models
 
     public static class AddressHelpers
     {
-        public static Address GetAddress(string input)
+        public static List<Address> GetAddresses(string input)
         {
-            var address = input
-            .Split('\n')
-            .Select(line =>
+            try
             {
-                // Split line into parts
-                var parts = line.Split(new[] { ' ' }, 3);
-                var code = parts[0];
-                var city = parts[1].TrimEnd(',');
-
-                string addressPart = parts.Length > 2 ? parts[2] : "";
-                string street = ExtractStreet(addressPart);
-                string houseNumber = ExtractHouseNumber(addressPart);
-                string flatNumber = ExtractFlatNumber(addressPart);
-
-                return new Address
+                var address = input
+                .Split('\n')
+                .Select(line =>
                 {
-                    Code = code,
-                    City = city,
-                    Street = street,
-                    HouseNumber = houseNumber,
-                    FlatNumber = flatNumber
-                };
-            }).FirstOrDefault();
+                    // Split line into parts
+                    var parts = line.Split(new[] { ' ' }, 3);
+                    var code = parts[0];
+                    var city = parts[1].TrimEnd(',');
 
-            return address;
+                    string addressPart = parts.Length > 2 ? parts[2] : "";
+                    string street = ExtractStreet(addressPart);
+                    string houseNumber = ExtractHouseNumber(addressPart);
+                    string flatNumber = ExtractFlatNumber(addressPart);
+
+                    return new Address
+                    {
+                        PostalCode = code,
+                        City = city,
+                        Street = street,
+                        HouseNumber = houseNumber,
+                        FlatNumber = flatNumber
+                    };
+                }).ToList();
+
+                return address;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Ostrzeżenie", MessageBoxButtons.CancelTryContinue, MessageBoxIcon.Warning);
+                return [];
+            }
         }
 
         public static string ExtractStreet(string address)
         {
-            var match = Regex.Match(address, @"^\s*(?:ul\.?\s+)?(\D.*?)(?:\s+\d.*)?$");
+            var match = Regex.Match(address, @"^\s*(?:ul\.?\s+)?(\D.*?)(?:\s+\d.*)?$", RegexOptions.IgnoreCase);
             return match.Success ? match.Groups[1].Value.Trim() : "";
         }
 

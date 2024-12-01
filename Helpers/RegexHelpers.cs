@@ -6,8 +6,43 @@ using WinFormsAutoFiller.Utilis;
 
 namespace WinFormsAutoFiller.Helpers
 {
-    internal static class RegexHelpers
+    internal static partial class RegexHelpers
     {
+        private static readonly Regex DateRangeRegexs = DateRangeRegex();
+
+        public static (int RangeCount, List<DateTime> Dates) ExtractDatesWithRangeInfo(string input)
+        {
+            var matches = DateRangeRegexs.Matches(input);
+            var result = new List<DateTime>();
+            int rangeCount = 0;
+
+            foreach (Match match in matches)
+            {
+                if (match.Groups[1].Success) // Date range (e.g., 15-17.11.2024)
+                {
+                    int startDay = int.Parse(match.Groups[1].Value);
+                    int endDay = int.Parse(match.Groups[2].Value);
+                    int month = int.Parse(match.Groups[3].Value);
+                    int year = int.Parse(match.Groups[4].Value);
+
+                    result.Add(new DateTime(year, month, startDay));
+                    result.Add(new DateTime(year, month, endDay));
+
+                    rangeCount++; // Increment range counter
+                }
+                else if (match.Groups[5].Success) // Single date (e.g., 16.11.2024)
+                {
+                    int day = int.Parse(match.Groups[5].Value);
+                    int month = int.Parse(match.Groups[6].Value);
+                    int year = int.Parse(match.Groups[7].Value);
+
+                    result.Add(new DateTime(year, month, day));
+                }
+            }
+
+            return (rangeCount, result);
+        }
+
         public static Result<CityAndDateModel, Error> GetName(string input)
         {
             try
@@ -81,8 +116,9 @@ namespace WinFormsAutoFiller.Helpers
             }
         }
 
-        public static string GetProgram(string[] inputs)
+        public static Dictionary<string, string> GetProgram(string[] inputs)
         {
+            Dictionary<string, string> list = [];
             try
             {
                 foreach (var input in inputs)
@@ -90,34 +126,18 @@ namespace WinFormsAutoFiller.Helpers
                     var match = RegexPatterns.GetProgramRegex().Match(input);
                     if (match.Success)
                     {
-                        return input;
+                        list.Add(input, match.Value);
                     }
                 }
-                return string.Empty;
+
+                return list;
             }
             catch
             {
-                return string.Empty;
+                return [];
             }
         }
 
-        public static string GetPUPCityName(string input)
-        {
-            try
-            {
-                var match = RegexPatterns.GetPUPCityName().Match(input);
-                if (match.Success)
-                {
-                    return match.Groups[1].Value;
-                }
-
-                return string.Empty;
-            }
-            catch
-            {
-                return string.Empty;
-            }
-        }
         public static string ExtractMatch(string input, string pattern)
         {
             Match match = Regex.Match(input, pattern, RegexOptions.IgnoreCase);
@@ -149,5 +169,8 @@ namespace WinFormsAutoFiller.Helpers
             string withoutSeparators = Regex.Replace(input, @"[_\.\s]", "");
             return withoutSeparators.ToLower();
         }
+
+        [GeneratedRegex(@"(?:(\d{1,2})-(\d{1,2})\.(\d{1,2})\.(\d{4})|(\d{1,2})\.(\d{1,2})\.(\d{4}))", RegexOptions.Compiled)]
+        private static partial Regex DateRangeRegex();
     }
 }

@@ -22,8 +22,8 @@ namespace FormFiller.Services;
 
 public interface IFileReader
 {
-    Task<DataTable?> ReadExcelFileAsync(string fileName, Dictionary<string, Regex> columnPatterns, string worksheetName);
-    ExcelWorkersRow? ReadExcelRow(string tempFilePath, int startIndex = 1);
+    Task<DataTable> ReadExcelFileAsync(string fileName, Dictionary<string, Regex> columnPatterns, string worksheetName);
+    ExcelWorkersRow ReadExcelRow(string tempFilePath, int startIndex = 1);
     Task<List<string>> GetExcelWorksheetNames(string fileName);
     Result<string, Error> FindWordInWordDocument(string fileName);
     Result<CompanyFormData, Error> FindObjectInExcelDocument(string filename);
@@ -32,7 +32,7 @@ public interface IFileReader
 
 public class FileReader : IFileReader
 {
-    public async Task<DataTable?> ReadExcelFileAsync(string fileName, Dictionary<string, Regex> columnPatterns, string worksheetName)
+    public async Task<DataTable> ReadExcelFileAsync(string fileName, Dictionary<string, Regex> columnPatterns, string worksheetName)
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         var encoding = Encoding.GetEncoding("UTF-16");
@@ -137,7 +137,7 @@ public class FileReader : IFileReader
         return newTable;
     }
 
-    public ExcelWorkersRow? ReadExcelRow(string tempFilePath, int startIndex = 1)
+    public ExcelWorkersRow ReadExcelRow(string tempFilePath, int startIndex = 1)
     {
         ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
         using var package = new ExcelPackage(new FileInfo(tempFilePath));
@@ -168,7 +168,7 @@ public class FileReader : IFileReader
         return excelRow;
     }
 
-    public ExcelWorkersRow? ReadExcelRow(DataTable table, int rowIndex)
+    public ExcelWorkersRow ReadExcelRow(DataTable table, int rowIndex)
     {
         if (table == null || rowIndex < 0 || rowIndex >= table.Rows.Count)
         {
@@ -193,11 +193,11 @@ public class FileReader : IFileReader
 
         return excelRow;
     }
-    public ExcelWorkersRow? ReadExcelRow(DataRow dataRow)
+    public ExcelWorkersRow ReadExcelRow(DataRow dataRow)
     {
         if (dataRow == null)
         {
-            return null; // Return null if the DataRow is null
+            return null;
         }
 
         var excelRow = new ExcelWorkersRow();
@@ -207,7 +207,7 @@ public class FileReader : IFileReader
         {
             var columnName = column.ColumnName;
             var cellValue = dataRow[column]?.ToString() ?? string.Empty;
-            excelRow.Data[columnName] = cellValue; // Assuming Data is a Dictionary or similar structure
+            excelRow.Data[columnName] = cellValue;
         }
 
         return excelRow;
@@ -215,33 +215,41 @@ public class FileReader : IFileReader
 
     public async Task<List<string>> GetExcelWorksheetNames(string fileName)
     {
-        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-        var encoding = Encoding.GetEncoding("UTF-16");
+        try
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            var encoding = Encoding.GetEncoding("UTF-16");
 
-        await using var stream = File.OpenRead(fileName);
-        using var reader = ExcelReaderFactory.CreateReader(stream, new ExcelReaderConfiguration()
-        {
-            FallbackEncoding = encoding
-        });
-        var result = reader.AsDataSet(new ExcelDataSetConfiguration
-        {
-            ConfigureDataTable = (_) => new ExcelDataTableConfiguration
+            await using var stream = File.OpenRead(fileName);
+            using var reader = ExcelReaderFactory.CreateReader(stream, new ExcelReaderConfiguration()
             {
-                UseHeaderRow = true
+                FallbackEncoding = encoding
+            });
+            var result = reader.AsDataSet(new ExcelDataSetConfiguration
+            {
+                ConfigureDataTable = (_) => new ExcelDataTableConfiguration
+                {
+                    UseHeaderRow = true
+                }
+            });
+
+            var list = new List<string>();
+            if (result.Tables.Count == 0) return null;
+            foreach (DataTable resultTable in result.Tables)
+            {
+                list.Add(resultTable.TableName);
             }
-        });
 
-        var list = new List<string>();
-        if (result.Tables.Count == 0) return null;
-        foreach (DataTable resultTable in result.Tables)
-        {
-            list.Add(resultTable.TableName);
+            return list;
         }
-
-        return list;
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Bład", MessageBoxButtons.OKCancel, MessageBoxIcon.Error);
+            return [];
+        }
     }
 
-    private static DataColumn? FindMatchingColumn(DataTable table, Regex regex)
+    private static DataColumn FindMatchingColumn(DataTable table, Regex regex)
     {
         return table.Columns.Cast<DataColumn>().FirstOrDefault(col => regex.IsMatch(col.ColumnName));
     }
@@ -377,7 +385,7 @@ public class FileReader : IFileReader
                         case "Osoba do kontaktu z PUP - imię i nazwisko":
                             formData.PUPContact.Name = value;
                             break;
-                        case "PKD (przeważąjące)":
+                        case "PKD":
                             formData.PKD = value;
                             break;
                         case "Osoba do podpisywania umów z PUP":
@@ -424,20 +432,17 @@ public class FileReader : IFileReader
             return new Error("General Error", ex.Message);
         }
     }
+
     public List<string> ReadColumnFromExcel(string filePath, string sheetName, string firstCellName)
     {
-        // Initialize a list to store column values
-        List<string> columnData = new List<string>();
+        List<string> columnData = [];
 
         try
         {
-            // Open the Excel file
             using (var workbook = new XLWorkbook(filePath))
             {
-                // Get the specified worksheet
                 var worksheet = workbook.Worksheet(sheetName);
 
-                // Find the first cell with the specified name
                 var firstCell = worksheet.CellsUsed().Where(x => x.GetText().StartsWith(firstCellName)).FirstOrDefault();
                 var firstCell1 = worksheet.CellsUsed().Where(x => x.GetText().Any()).Select(x => x.Value).ToList();
 
@@ -448,13 +453,10 @@ public class FileReader : IFileReader
                     throw new Exception($"Cell with value '{firstCellName}' not found in sheet '{sheetName}'.");
                 }
 
-                // Get the column number of the first cell
                 int columnNumber = firstCell.Address.ColumnNumber;
 
-                // Iterate over all rows in the column starting from the first cell's row
                 foreach (var cell in worksheet.Column(columnNumber).CellsUsed())
                 {
-                    // Add the cell value to the list
                     columnData.Add(cell.GetText());
                 }
             }
@@ -465,5 +467,45 @@ public class FileReader : IFileReader
         }
 
         return columnData;
+    }
+
+    public static DataTable Clone(DataTable dataTables, DataTable dataTableAdditionalAllWorkers)
+    {
+        var mergedDataTable = dataTables.Clone(); // Skopiuj strukturę tabeli.
+
+        foreach (DataRow row in dataTables.Rows)
+        {
+            // Pobierz wartość z kolumny NazwiskoImie.
+            var nazwiskoImie = row[WorkersFormKeys.NazwiskoImie]?.ToString();
+
+            if (!string.IsNullOrEmpty(nazwiskoImie))
+            {
+                // Znajdź dopasowany wiersz w dodatkowej tabeli.
+                var matchingRow = dataTableAdditionalAllWorkers
+                    .AsEnumerable()
+                    .FirstOrDefault(r => r[WorkersFormKeys.NazwiskoImie]?.ToString() == nazwiskoImie);
+
+                if (matchingRow != null)
+                {
+                    // Dodaj nową kolumnę do mergedDataTable, jeśli nie istnieje.
+                    if (!mergedDataTable.Columns.Contains(WorkersFormKeys.KwotaOtrzymanegoDofinansowania))
+                    {
+                        mergedDataTable.Columns.Add(WorkersFormKeys.KwotaOtrzymanegoDofinansowania, typeof(string));
+                    }
+
+                    // Skopiuj oryginalny wiersz do nowej tabeli.
+                    var newRow = mergedDataTable.NewRow();
+                    newRow.ItemArray = row.ItemArray;
+
+                    // Dodaj wartość KwotaOtrzymanegoDofinansowania.
+                    newRow[WorkersFormKeys.KwotaOtrzymanegoDofinansowania] =
+                        matchingRow[WorkersFormKeys.KwotaOtrzymanegoDofinansowania];
+
+                    mergedDataTable.Rows.Add(newRow);
+                }
+            }
+        }
+        return mergedDataTable;
+
     }
 }

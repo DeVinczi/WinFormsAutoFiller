@@ -51,7 +51,7 @@ namespace WinFormsAutoFiller.Encryption
 
                 return result;
             }
-            catch (Exception ex)
+            catch
             {
                 return string.Empty;
             }

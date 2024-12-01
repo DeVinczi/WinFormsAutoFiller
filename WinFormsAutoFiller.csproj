@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
+    <Nullable>disable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon>res.ico</ApplicationIcon>
@@ -64,5 +64,13 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
-
+	<ItemGroup>
+		<Compile Remove="GeneratedCode\**" />
+	</ItemGroup>
+	<PropertyGroup>
+		<GeneratedCodeAnalysis>false</GeneratedCodeAnalysis>
+	</PropertyGroup>
+	<PropertyGroup>
+		<Deterministic>true</Deterministic>
+	</PropertyGroup>
 </Project>

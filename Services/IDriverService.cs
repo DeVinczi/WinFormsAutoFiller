@@ -11,19 +11,20 @@ namespace FormFiller.Services
     public class DriverService : IDriverService, IDisposable
     {
         private static DriverService _instance;
-        private static readonly object _lock = new object();
+        private static readonly object _lock = new();
 
         private ChromeDriver _driver;
         private WebDriverWait _wait;
+        private bool _testMode;
 
         private bool _disposed = false;
 
-        private DriverService()
+        private DriverService(bool testMode = false)
         {
+            _testMode = testMode;
             InitializeDriver();
         }
 
-        // Singleton instance property
         public static DriverService Instance
         {
             get
@@ -48,16 +49,25 @@ namespace FormFiller.Services
             {
                 var options = new ChromeOptions
                 {
-                    EnableDownloads = true,
+                    EnableDownloads = true
                 };
 
                 var path = Path.Combine(Path.GetTempPath() + "ayp");
 
                 Directory.CreateDirectory(path);
-                options.AddUserProfilePreference("filebrowser.default_location", path);
-                options.AddUserProfilePreference("download.default_directory", path);
-                options.AddUserProfilePreference("download.directory_upgrade", true);
-                options.AddUserProfilePreference("savefile.default_directory", path);
+                if (!_testMode)
+                {
+                    options.AddUserProfilePreference("filebrowser.default_location", path);
+                    options.AddUserProfilePreference("download.default_directory", path);
+                    options.AddUserProfilePreference("download.directory_upgrade", true);
+                    options.AddUserProfilePreference("savefile.default_directory", path);
+                }
+                options.AddArgument("--start-maximized");
+
+                if (_testMode)
+                {
+                    options.DebuggerAddress = "127.0.0.1:9222";
+                }
 
                 _driver = new ChromeDriver(options);
                 _wait = new WebDriverWait(_driver, TimeSpan.FromSeconds(30));

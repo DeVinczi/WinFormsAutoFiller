@@ -1,6 +1,6 @@
 ﻿namespace WinFormsAutoFiller.Utilis
 {
-    public sealed record Error(string Code, string? Message = null);
+    public sealed record Error(string Code, string Message = null);
 
     public static class Errors
     {
@@ -11,7 +11,7 @@
 
         public static readonly Error IncorrectNameFile =
             new(ErrorMessage.NiepoprawnaNazwaPliku, "Niepoprawna nazwa pliku.\n" +
-                "Poprawny schemat: Dane ogólne i pracowników_NAZWA KLIENTA_KFS 2025.xlsx");
+                "Poprawny schemat: 'Dane ogólne i pracowników...'");
 
         public static readonly Error WorkHoursAreEmpty =
             new(ErrorMessage.BrakIlosciGodzin, "Nie znaleziono godzin w pliku z programem szkolenia.");
@@ -24,6 +24,7 @@
 
         public static readonly Error BrakPlikuNipError = new(ErrorMessage.BrakPlikuNip, "Wystąpił bład. Nie ma plików w folderze z NIP.");
         public static readonly Error PlikZZałącznikaNieWystepujeError = new(ErrorMessage.PlikZZałącznikaNieWystepujeError, "Plik z załącznika nie wystepuje. Sprawdź nazwy!");
+        public static readonly Error InvalidWorksheet = new(ErrorMessage.InvalidWorksheet, "Nieprawidłowa zakładka w Excelu.");
     }
 
     public static class ErrorMessage
@@ -34,6 +35,7 @@
         public const string PytaniaDoWniosku = "Wystąpił bład z danymi do wniosku.";
         public const string BrakPlikuNip = "Wystąpił bład. Nie ma plików w folderze z NIP.";
         public const string PlikZZałącznikaNieWystepujeError = "Plik z załącznika nie wystepuje. Sprawdź nazwy!";
+        public const string InvalidWorksheet = "Nieprawidłowa zakładka w Excelu.";
     }
 
     public static class GUIMessage

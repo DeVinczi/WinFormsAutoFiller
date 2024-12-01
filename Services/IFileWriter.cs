@@ -1,25 +1,27 @@
-﻿using System.Data;
-using OfficeOpenXml;
+﻿using OfficeOpenXml;
+
+using System.Data;
+
 using static System.String;
 
 namespace FormFiller.Services;
 
 public interface IFileWriter
 {
-    Task<(string,ExcelWorksheet)> ExcelWriterAsync(DataTable? dataTable, string filePath);
-    Task<(string,ExcelWorksheet)> ExcelWriterAsyncReversed(DataTable? dataTable, string filePath);
+    Task<(string, ExcelWorksheet)> ExcelWriterAsync(DataTable dataTable, string filePath);
+    Task<(string, ExcelWorksheet)> ExcelWriterAsyncReversed(DataTable dataTable, string filePath);
     Task<bool> DeleteExcelRowAsync(string tempFilePath, int row);
 }
 
 public class FileWriter : IFileWriter
 {
-    public async Task<(string, ExcelWorksheet)> ExcelWriterAsync(DataTable? dataTable, string filePath)
+    public async Task<(string, ExcelWorksheet)> ExcelWriterAsync(DataTable dataTable, string filePath)
     {
         if (dataTable is null)
         {
-            return (Empty,null)!;
+            return (Empty, null)!;
         }
-        
+
         var tempFilePath = Path.ChangeExtension(Path.Combine(Path.GetTempPath(), Path.GetTempFileName()), ".xlsx");
         try
         {
@@ -52,7 +54,7 @@ public class FileWriter : IFileWriter
         }
     }
 
-    public async Task<(string, ExcelWorksheet)> ExcelWriterAsyncReversed(DataTable? dataTable, string filePath)
+    public async Task<(string, ExcelWorksheet)> ExcelWriterAsyncReversed(DataTable dataTable, string filePath)
     {
         if (dataTable is null)
         {
@@ -84,7 +86,7 @@ public class FileWriter : IFileWriter
             }
 
             worksheet.Cells.AutoFitColumns();
-            var x=worksheet.Rows;
+            var x = worksheet.Rows;
             await package.SaveAsAsync(new FileInfo(tempFilePath));
 
             return (tempFilePath, worksheet);
@@ -118,5 +120,5 @@ public class FileWriter : IFileWriter
         }
     }
 
-    
+
 }
